@@ -15,6 +15,33 @@ def reset_gate_count():
     GATE_COUNT = 0
 
 
+def count_physical(n):
+    """Manually attribute n physical NAND gates to the global counter.
+
+    GATE-COUNTING RULE FOR FEEDBACK CIRCUITS (latches/flip-flops,
+    registers.py): a cross-coupled NAND pair has no single-pass order —
+    computing its settled output means re-evaluating the same two gates
+    in software until the values stop changing. That iteration is a
+    software artifact of simulating feedback with no propagation delay;
+    in real hardware it is still just N physical gates, each firing once
+    per clock phase, not once per settle iteration. So feedback circuits
+    must NOT call the counted Nand() during their internal settle loop
+    (use the uncounted raw NAND below instead) — they call this function
+    exactly once per invocation, with n = the number of physical gates in
+    that circuit, however many iterations settling took.
+    """
+    global GATE_COUNT
+    GATE_COUNT += n
+
+
+def nand_raw(a, b):
+    """Uncounted NAND — for internal use only, inside the settle loop of a
+    feedback circuit (see count_physical above). Never call this from
+    ordinary combinational code; use Nand() so the gate counter stays
+    accurate."""
+    return 0 if (a and b) else 1
+
+
 def Nand(a, b):
     """The one and only primitive gate. Everything else is built from this."""
     global GATE_COUNT

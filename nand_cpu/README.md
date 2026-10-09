@@ -13,12 +13,33 @@ NAND  →  gates  →  arithmetic (ALU)  →  memory  →  CPU  →  running pro
 |---|---|---|
 | `gates.py` | 1. Combinational Logic | NAND → NOT, AND, OR, XOR, MUX, DMUX (+16-bit versions) |
 | `arithmetic.py` | 2. Boolean Arithmetic | Half/Full adder → 16-bit adder → subtract → zero-check |
-| `memory.py` | 3. Sequential Logic | Register, RAM, Program Counter |
-| `assembler.py` | 4. CPU (instruction set) | Our own 10-instruction ISA + two-pass assembler |
-| `cpu.py` | 4. CPU (execution) | Fetch–decode–execute loop, logs gate cost per cycle |
+| `memory.py` | 3. Sequential Logic | Register, RAM, Program Counter — a **behavioural model** (see below) |
+| `registers.py` | 3b. Sequential Logic, gate-built | SR latch → gated D latch → master-slave DFF → Bit → GateRegister → RAM8 |
+| `assembler.py` | 4. CPU (instruction set) | Our own 13-instruction ISA + two-pass assembler |
+| `cpu.py` | 4. CPU (execution) | Fetch–decode–execute loop, logs gate cost + flags per cycle |
 | `visualizer.py` | Extra | Turns the execution log into an HTML report |
 | `demo.py` | — | Runs the "sum 1 to 10" program end-to-end |
-| `test_gates.py` | — | Sanity-checks every layer against known truth tables |
+| `test_gates.py` | — | Sanity-checks gates/arithmetic/CPU/ISA against known truth tables |
+| `test_registers.py` | — | Sanity-checks the gate-built register hierarchy and RAM8 |
+
+### Behavioural model vs. gate-built memory
+
+`memory.py`'s `Register`/`RAM` are a **behavioural model**: `self.bits =
+list(...)` on load, i.e. Python's own assignment stands in for "a register
+remembers a value". That's what the CPU's 256-word program/data RAM uses —
+building all 256 words from real NAND-gate flip-flops would cost millions
+of simulated gates per cycle for no behavioural difference.
+
+`registers.py` builds memory the way real hardware does, bottom-up, from
+nothing but `Nand()`: a cross-coupled NAND pair (SR latch) → a gated D
+latch → a master-slave D flip-flop (captures only on the clock edge) → a
+1-bit `Bit` cell with a load input → a 16-bit `GateRegister` → `RAM8`, an
+8-word RAM built from 8 `GateRegister`s behind a 3-bit address decoder.
+**`RAM8` is the gate-built proof** that this construction is a faithful
+stand-in for the behavioural model — `test_registers.py` checks it against
+that model on hundreds of random reads and writes. `RAM8` itself is not
+wired into the CPU (only tested); the CPU's ACC, program counter, and
+instruction register, however, are real `GateRegister`s.
 
 ## How to run
 
