@@ -20,31 +20,33 @@ def check(label, actual, expected):
 
 
 def test_sr_latch_set_reset_hold():
+    # Active-LOW inputs now (sr_latch takes s_bar/r_bar directly, no
+    # input inversion): s_bar=0 sets, r_bar=0 resets, 1,1 holds.
     q, qn = 0, 1  # power-up rest state
-    q, qn = sr_latch(1, 0, q, qn)
+    q, qn = sr_latch(0, 1, q, qn)  # s_bar=0 -> set
     check("SR latch set -> q", q, 1)
     check("SR latch set -> qn", qn, 0)
 
-    q, qn = sr_latch(0, 0, q, qn)
+    q, qn = sr_latch(1, 1, q, qn)  # hold
     check("SR latch hold after set -> q", q, 1)
     check("SR latch hold after set -> qn", qn, 0)
 
-    q, qn = sr_latch(0, 1, q, qn)
+    q, qn = sr_latch(1, 0, q, qn)  # r_bar=0 -> reset
     check("SR latch reset -> q", q, 0)
     check("SR latch reset -> qn", qn, 1)
 
-    q, qn = sr_latch(0, 0, q, qn)
+    q, qn = sr_latch(1, 1, q, qn)  # hold
     check("SR latch hold after reset -> q", q, 0)
     check("SR latch hold after reset -> qn", qn, 1)
 
 
 def test_sr_latch_forbidden_input():
-    # Documented, not avoided: s=r=1 drives both core NANDs' inverted
-    # input to 0, forcing both outputs to 1 — breaking the Q/Qn
+    # Documented, not avoided: s_bar=r_bar=0 drives both core NANDs'
+    # own 0 input, forcing both outputs to 1 — breaking the Q/Qn
     # complementary invariant. A real latch's resolution on release is a
     # propagation-delay race (undefined); this zero-delay simulation
     # settles deterministically at q=qn=1.
-    q, qn = sr_latch(1, 1, 0, 1)
+    q, qn = sr_latch(0, 0, 0, 1)
     check("SR latch forbidden input q", q, 1)
     check("SR latch forbidden input qn", qn, 1)
 
@@ -121,12 +123,20 @@ def test_ram8_matches_behavioural_model():
 
 def report_gate_costs():
     gates.reset_gate_count()
-    sr_latch(1, 0, 0, 1)
+    sr_latch(1, 0, 0, 1)  # reset (active-low); cost is the same for any input
     sr_cost = gates.GATE_COUNT
+
+    gates.reset_gate_count()
+    d_latch(1, 1, 0, 1)
+    d_latch_cost = gates.GATE_COUNT
 
     gates.reset_gate_count()
     DFF().tick(1)
     dff_cost = gates.GATE_COUNT
+
+    gates.reset_gate_count()
+    Bit().tick(1, 1)
+    bit_cost = gates.GATE_COUNT
 
     gates.reset_gate_count()
     GateRegister().tick(1, int_to_bits(0xFFFF))
@@ -143,11 +153,13 @@ def report_gate_costs():
 
     print()
     print("Measured gate costs:")
-    print(f"  1 SR latch call:          {sr_cost}")
-    print(f"  1 DFF tick:               {dff_cost}")
+    print(f"  1 SR latch call:            {sr_cost}")
+    print(f"  1 gated D latch call:       {d_latch_cost}")
+    print(f"  1 master-slave DFF tick:    {dff_cost}")
+    print(f"  1 Bit (1-bit cell) tick:    {bit_cost}")
     print(f"  1 16-bit GateRegister tick: {reg_cost}")
-    print(f"  1 RAM8 write:             {ram8_write_cost}")
-    print(f"  1 RAM8 read:              {ram8_read_cost}")
+    print(f"  1 RAM8 write:               {ram8_write_cost}")
+    print(f"  1 RAM8 read:                {ram8_read_cost}")
 
 
 if __name__ == "__main__":

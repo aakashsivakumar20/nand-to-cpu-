@@ -21,43 +21,55 @@ N physical gates in hardware, firing once per clock phase. So the settle
 loop uses the uncounted gates.nand_raw(), and count_physical(n) is called
 exactly once per invocation to attribute the real gate count, independent
 of how many iterations settling took. Every other gate in this file (the
-D/enable forming logic, the Bit's Mux, the address decoder) is ordinary
-combinational logic with no feedback, so it goes through the normally
-counted gates.Not/And/Or/Mux/DMux and needs no special handling.
+Bit's Mux, the address decoder) is ordinary combinational logic with no
+feedback, so it goes through the normally counted gates.Nand/Not/And/
+Or/Mux/DMux and needs no special handling.
+
+The SR latch is the textbook 2-gate active-LOW circuit directly (no
+input inversion — see sr_latch); the gated D latch is the textbook
+4-NAND circuit directly (see d_latch), not a separate SR latch fed by
+extra D/enable-forming gates. The master-slave DFF is exactly two of
+those D latches plus one inverter for the clock, each physical gate
+counted exactly once per tick() — see DFF's docstring for why phase_high
+does not re-run the master's gates a second time.
 """
 
 import gates
-from gates import Not, And, Mux, DMux
+from gates import Nand, Not, And, Mux, DMux
 
 
-# ---- 1. SR latch: 2 cross-coupled NAND gates ----
+# ---- 1. SR latch: the textbook 2-gate active-LOW circuit, directly ----
 
-SR_LATCH_GATES = 2  # the two cross-coupled NANDs themselves
+SR_LATCH_GATES = 2  # the two cross-coupled NANDs — nothing else
 
 
-def sr_latch(s, r, prev_q, prev_qn, max_iters=16):
-    """Cross-coupled NAND SR latch. s/r are active-HIGH: set=1 forces
-    Q=1, reset=1 forces Q=0, s=r=0 holds the last value. Returns (q, qn).
+def sr_latch(s_bar, r_bar, prev_q, prev_qn, max_iters=16):
+    """Cross-coupled NAND SR latch, ACTIVE-LOW inputs — the textbook
+    2-gate circuit taken directly, with no input inversion:
+        q  = NAND(s_bar, qn)
+        qn = NAND(r_bar, q)
+    s_bar=0 forces q=1 (set), r_bar=0 forces q=0 (reset), s_bar=r_bar=1
+    holds the last value. Returns (q, qn).
 
-    FORBIDDEN INPUT: s=1 and r=1 at the same time. The two core NAND
-    gates are then both being forced toward output 1 by their *inverted*
-    input (s_bar=0 or r_bar=0 respectively), which breaks the Q/Qn
-    complementary invariant real hardware depends on; in a physical
-    latch, releasing both lines together makes the final state a race
-    between the two gates' propagation delays — undefined. We don't
-    special-case it: this simulation has no delay to race on, so it
-    settles deterministically at q=qn=1, which is the textbook "invalid"
-    state. test_registers.py asserts exactly that (documented, not
-    silently avoided).
+    FORBIDDEN INPUT: s_bar=0 and r_bar=0 at the same time. Both core
+    NAND gates are then forced toward output 1 by their own 0 input,
+    which breaks the Q/Qn complementary invariant real hardware depends
+    on; in a physical latch, releasing both lines together makes the
+    final state a race between the two gates' propagation delays —
+    undefined. We don't special-case it: this simulation has no delay to
+    race on, so it settles deterministically at q=qn=1, which is the
+    textbook "invalid" state. test_registers.py asserts exactly that
+    (documented, not silently avoided).
 
-    Built from the classic 2-gate active-LOW NAND latch via two input
-    inverters (s_bar/r_bar), which are ordinary gates — counted
-    normally. Only the 2 cross-coupled core gates use the feedback
-    gate-counting rule (see count_physical's docstring).
+    GATE COUNTING: this is the ENTIRE physical circuit — just the 2
+    cross-coupled NANDs, counted once per call via count_physical,
+    independent of how many iterations settling took (see
+    count_physical's docstring). No input-forming gates here at all —
+    callers that want active-HIGH semantics invert before calling, and
+    that inversion is their own, separately-counted gate (see d_latch,
+    which instead builds s_bar/r_bar straight from NAND gates and never
+    needs an active-high view in the first place).
     """
-    s_bar = Not(s)   # counted normally — 1 gate
-    r_bar = Not(r)   # counted normally — 1 gate
-
     q, qn = prev_q, prev_qn
     for _ in range(max_iters):
         new_q = gates.nand_raw(s_bar, qn)
@@ -68,44 +80,65 @@ def sr_latch(s, r, prev_q, prev_qn, max_iters=16):
     else:
         raise RuntimeError(
             f"SR latch did not settle within {max_iters} iterations "
-            f"(s={s}, r={r}, prev=({prev_q},{prev_qn}))"
+            f"(s_bar={s_bar}, r_bar={r_bar}, prev=({prev_q},{prev_qn}))"
         )
 
     gates.count_physical(SR_LATCH_GATES)
     return q, qn
 
 
-# ---- 2. Gated D latch: SR latch + enable, D/EN forming logic ----
+# ---- 2. Gated D latch: the textbook 4-NAND circuit ----
 
 def d_latch(d, en, prev_q, prev_qn):
     """Transparent while en=1 (q follows d); holds the last value while
-    en=0. Built so S and R are never both 1: s = AND(d, en),
-    r = AND(NOT(d), en) — exactly one of them can be 1 when en=1, and
-    both are 0 when en=0 (hold), so the SR latch's forbidden input is
-    structurally unreachable here."""
-    not_d = Not(d)
-    s = And(d, en)
-    r = And(not_d, en)
-    return sr_latch(s, r, prev_q, prev_qn)
+    en=0. The textbook 4-NAND gated D latch, taken directly:
+        a  = NAND(d, en)
+        b  = NAND(a, en)
+        q  = NAND(a, qn)
+        qn = NAND(b, q)
+    The last two ARE the active-low SR latch core above, fed s_bar=a,
+    r_bar=b — a and b can never both be 0 (when en=0 both are forced to
+    1; when en=1 exactly one of them is 0, depending on d), so the SR
+    latch's forbidden input is structurally unreachable here. a and b
+    depend only on d/en, not on the feedback, so they're computed once
+    (ordinary counted NANDs) outside the settle loop; only the q/qn pair
+    needs iterating.
+    """
+    a = Nand(d, en)   # counted normally — 1 gate
+    b = Nand(a, en)   # counted normally — 1 gate
+    return sr_latch(a, b, prev_q, prev_qn)
 
 
 # ---- 3. Master-slave D flip-flop: two gated D latches, clk-driven ----
 
 class DFF:
-    """Edge-triggered 1-bit flip-flop, built from two gated D latches:
-    a master (enabled while clk=0, transparent to D) feeding a slave
-    (enabled while clk=1, transparent to the master's held value). One
-    full tick() runs the clock 0 -> 1 once, so the flip-flop captures
-    whatever D was during the "clk=0" phase and makes it visible at Q
-    only once the "clk=1" phase completes — the same clock edge a real
-    master-slave DFF reacts to, not to D changing on its own.
+    """Edge-triggered 1-bit flip-flop: a master latch (enabled while
+    clk=0, transparent to D) feeding a slave latch (enabled while clk=1,
+    transparent to the master's held value). One full tick() runs the
+    clock 0 -> 1 once, so the flip-flop captures whatever D was during
+    the "clk=0" phase and makes it visible at Q only once the "clk=1"
+    phase completes — the same clock edge a real master-slave DFF reacts
+    to, not to D changing on its own.
+
+    GATE COUNTING: a master-slave DFF is physically two latches plus one
+    inverter that derives the master's enable from the clock — 2*4 + 1 = 9
+    gates, counted exactly once per tick(). The one inverter fires in
+    phase_low (NOT(clk=0) -> master_en=1, opening the master to sample
+    d). phase_high does NOT re-run the master's gates a second time: by
+    the time the clock reaches 1, the master's enable would be NOT(1)=0
+    (closed) and its stored value simply isn't re-derived — a closed
+    latch holding is not a second physical evaluation of that latch, so
+    re-calling d_latch for it here would double-count the same 4 gates.
+    The slave's enable is the clock signal directly (no inverter needed
+    for it), so phase_high spends exactly one d_latch call (4 gates) on
+    the slave and nothing more.
     """
 
     def __init__(self):
         # Power up in the (q=0, qn=1) self-consistent state. (0, 0) is
-        # NOT a valid SR latch rest state — under hold (s=r=0) it is a
-        # perfect zero-delay oscillator that never settles (q and qn
-        # would forever flip to match each other then diverge again).
+        # NOT a valid SR latch rest state — under hold (s_bar=r_bar=1)
+        # it is a perfect zero-delay oscillator that never settles (q
+        # and qn would forever flip to match each other then diverge).
         self.master_q, self.master_qn = 0, 1
         self.slave_q, self.slave_qn = 0, 1
 
@@ -114,24 +147,22 @@ class DFF:
         return self.slave_q
 
     def phase_low(self, d):
-        """clk=0: master is transparent (enable=NOT(clk)=1) and samples
-        d; the slave's enable=clk=0, so it holds — Q is unaffected."""
+        """clk=0: the DFF's one clock inverter fires here (NOT(0)=1),
+        opening the master, which then samples d. The slave's enable is
+        clk=0 directly (closed), so it isn't touched — Q is unaffected,
+        proving D alone (without a clock edge) can't move Q."""
+        master_en = Not(0)   # the ONE inverter this DFF spends per tick
         self.master_q, self.master_qn = d_latch(
-            d, 1, self.master_q, self.master_qn
+            d, master_en, self.master_q, self.master_qn
         )
-        return self.slave_q  # unchanged — proves D alone can't move Q
+        return self.slave_q
 
     def phase_high(self):
-        """clk=1: master's enable=NOT(clk)=0, so it now holds whatever
-        it last sampled; the slave's enable=clk=1, so it becomes
-        transparent and Q takes on the master's held value."""
+        """clk=1: the slave's enable is clk=1 directly (open) — it
+        captures whatever the master is currently holding. The master
+        itself is not re-evaluated here (see the class docstring)."""
         self.slave_q, self.slave_qn = d_latch(
             self.master_q, 1, self.slave_q, self.slave_qn
-        )
-        # master re-evaluated with en=0 so it's charged to the counter
-        # for this phase too (it's a real gate, idle or not)
-        self.master_q, self.master_qn = d_latch(
-            self.master_q, 0, self.master_q, self.master_qn
         )
         return self.slave_q
 
