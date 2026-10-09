@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NAND-to-CPU — Interactive</title>
+<style>
+  :root {
+    /* surfaces (elevation scale, darkest -> lightest) */
+    --bg-0: #0a0c12;
+    --surface-1: #12141d;
+    --surface-2: #171a24;
+    --surface-2-hover: #1c202c;
+    --surface-inset: #0a0c12;
+
+    /* borders */
+    --border: #262a38;
+    --border-soft: #1d212c;
+
+    /* text */
+    --text: #e8eaf0;
+    --text-dim: #aab0bd;
+    --muted: #7d8493;
+
+    /* accent + status */
+    --accent: #7dd3fc;
+    --accent-2: #38bdf8;
+    --accent-soft: rgba(56, 189, 248, 0.14);
+    --red: #f87171;
+    --amber: #fbbf24;
+    --green: #4ade80;
+
+    /* elevation shadows */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 6px 20px -6px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 16px 36px -10px rgba(0, 0, 0, 0.6);
+
+    /* radii */
+    --radius-sm: 7px;
+    --radius-md: 11px;
+    --radius-lg: 15px;
+
+    /* 8px spacing scale */
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 32px;
+    --space-8: 40px;
+
+    /* type */
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  ::selection { background: var(--accent-2); color: #06111a; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--bg-0);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(900px 500px at 14% -8%, rgba(56, 189, 248, 0.09), transparent 60%),
+      radial-gradient(700px 420px at 100% 0%, rgba(125, 211, 252, 0.05), transparent 55%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 1360px;
+    margin: 0 auto;
+    padding: 40px 32px 72px;
+  }
+
+  a { color: var(--accent-2); }
+
+  /* ---- header ---- */
+  .page-header { margin-bottom: var(--space-8); }
+  .title-row { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+  .page-header h1 {
+    margin: 0;
+    color: var(--accent);
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .page-header h1 .hl { color: var(--muted); font-weight: 500; }
+  .badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent-2);
+    background: var(--accent-soft);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    padding: 5px 12px;
+    border-radius: 999px;
+  }
+  .badge-pill::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.25);
+  }
+  .subtitle {
+    color: var(--text-dim);
+    margin: var(--space-3) 0 0;
+    font-size: 14.5px;
+    line-height: 1.65;
+    max-width: 780px;
+  }
+
+  /* ---- layout ---- */
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: var(--space-7);
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  /* ---- panel system ---- */
+  .panel {
+    background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 24px;
+    box-shadow: var(--shadow-md);
+  }
+  .panel + .panel { margin-top: var(--space-6); }
+
+  .panel h2 {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 700;
+    margin: 0 0 var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .panel h2::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 2px;
+    background: var(--accent-2);
+    flex: 0 0 auto;
+  }
+
+  .tag {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+  .tag-input { color: var(--accent-2); background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.28); }
+  .tag-output { color: var(--green); background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.28); }
+
+  /* ---- reference table (sidebar) ---- */
+  table.ref { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.ref th, table.ref td {
+    text-align: left;
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+  }
+  table.ref tr:last-child td { border-bottom: none; }
+  table.ref th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  table.ref td.op { color: var(--accent-2); font-family: var(--font-mono); font-weight: 600; white-space: nowrap; }
+  table.ref td.desc { color: var(--text-dim); }
+  table.ref tr:hover td { background: rgba(255, 255, 255, 0.025); }
+
+  .hint-text { color: var(--muted); font-size: 12px; line-height: 1.65; margin: var(--space-4) 0 0; }
+
+  /* ---- example buttons ---- */
+  .examples { display: flex; flex-direction: column; gap: var(--space-2); }
+  .examples button { text-align: left; }
+  .examples button::before { content: "▸ "; color: var(--accent-2); opacity: 0.7; }
+
+  /* ---- buttons (base) ---- */
+  button {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    padding: 10px 16px;
+    font-size: 13.5px;
+    transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease,
+                transform 0.12s ease, box-shadow 0.18s ease;
+  }
+  button:hover {
+    border-color: rgba(56, 189, 248, 0.5);
+    color: var(--accent);
+    background: var(--surface-2-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+  }
+  button:active { transform: translateY(0); box-shadow: none; }
+  button:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
+  .run-btn {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #06111a;
+    font-weight: 700;
+    border: none;
+    padding: 12px 24px;
+    font-size: 14.5px;
+    box-shadow: 0 4px 16px -4px rgba(56, 189, 248, 0.45);
+  }
+  .run-btn:hover {
+    color: #06111a;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px -6px rgba(56, 189, 248, 0.55);
+    filter: brightness(1.05);
+  }
+  .run-btn:active { transform: translateY(0); box-shadow: 0 3px 10px -3px rgba(56, 189, 248, 0.4); }
+
+  /* ---- natural-language input row ---- */
+  .nl-row { display: flex; gap: var(--space-3); align-items: stretch; margin-bottom: var(--space-3); }
+  input#nlInput {
+    flex: 1 1 auto;
+    background: var(--surface-inset);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 13.5px;
+    font-family: inherit;
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.35);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  input#nlInput:focus {
+    outline: none;
+    border-color: var(--accent-2);
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 3px var(--accent-soft);
+  }
+  input#nlInput::placeholder { color: #5b6272; }
+
+  .nl-hint { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0 0 var(--space-4); }
+
+  .nl-message {
+    display: none;
+    border-radius: var(--radius-sm);
+    padding: 11px 16px;
+    font-size: 13px;
+    margin-bottom: var(--space-4);
+    line-height: 1.55;
+    animation: fadeSlideIn 0.35s ease both;
+  }
+  .nl-message.warn {
+    display: block;
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    color: var(--amber);
+  }
+  .nl-message.success {
+    display: block;
+    background: rgba(74, 222, 128, 0.08);
+    border: 1px solid rgba(74, 222, 128, 0.4);
+    color: var(--green);
+    font-weight: 600;
+  }
+  .nl-message.warn::before { content: "⚠ "; }
+  .nl-message.success::before { content: "✓ "; }
+
+  /* ---- code editor ---- */
+  textarea#source {
+    width: 100%;
+    min-height: 340px;
+    background: var(--surface-inset);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    line-height: 1.65;
+    padding: 16px;
+    resize: vertical;
+    tab-size: 4;
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.35);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  textarea#source:focus {
+    outline: none;
+    border-color: var(--accent-2);
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 3px var(--accent-soft);
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+    flex-wrap: wrap;
+  }
+  .toolbar-hint { color: var(--muted); font-size: 12.5px; }
+
+  .error-box {
+    display: none;
+    margin-top: var(--space-4);
+    background: rgba(248, 113, 113, 0.08);
+    border: 1px solid rgba(248, 113, 113, 0.4);
+    color: var(--red);
+    border-radius: var(--radius-sm);
+    padding: 13px 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    white-space: pre-wrap;
+    animation: fadeSlideIn 0.35s ease both;
+  }
+  .error-box::before { content: "✕ "; font-family: var(--font-sans); }
+
+  /* ---- output section divider ---- */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: var(--space-8) 0 var(--space-4);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .section-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border), transparent);
+  }
+
+  /* ---- summary stats ---- */
+  .summary {
+    display: none;
+    gap: 40px;
+    flex-wrap: wrap;
+    animation: fadeSlideIn 0.45s cubic-bezier(.16,1,.3,1) both;
+  }
+  .summary.panel { padding: 22px 28px; }
+  .stat { min-width: 118px; }
+  .stat b {
+    color: var(--accent);
+    font-size: 26px;
+    font-weight: 800;
+    display: block;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ---- trace table ---- */
+  .trace-wrap {
+    margin-top: var(--space-6);
+    display: none;
+    animation: fadeSlideIn 0.45s cubic-bezier(.16,1,.3,1) both;
+  }
+  .trace-wrap.panel { padding: 22px 24px; }
+
+  table.trace {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    background: var(--surface-1);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    font-size: 13px;
+    font-family: var(--font-mono);
+  }
+  table.trace th, table.trace td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    text-align: left;
+  }
+  table.trace th {
+    font-family: var(--font-sans);
+    color: var(--muted);
+    background: var(--surface-2);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  table.trace tbody tr {
+    transition: background-color 0.15s ease;
+    animation: rowIn 0.4s ease both;
+  }
+  table.trace tbody tr:nth-child(1) { animation-delay: 0ms; }
+  table.trace tbody tr:nth-child(2) { animation-delay: 15ms; }
+  table.trace tbody tr:nth-child(3) { animation-delay: 30ms; }
+  table.trace tbody tr:nth-child(4) { animation-delay: 45ms; }
+  table.trace tbody tr:nth-child(5) { animation-delay: 60ms; }
+  table.trace tbody tr:nth-child(6) { animation-delay: 75ms; }
+  table.trace tbody tr:nth-child(7) { animation-delay: 90ms; }
+  table.trace tbody tr:nth-child(8) { animation-delay: 105ms; }
+  table.trace tbody tr:nth-child(9) { animation-delay: 120ms; }
+  table.trace tbody tr:nth-child(10) { animation-delay: 135ms; }
+  table.trace tbody tr:hover { background: rgba(125, 211, 252, 0.05); }
+  table.trace tbody tr:last-child td { border-bottom: none; }
+
+  .bar {
+    height: 7px;
+    max-width: 200px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 999px;
+    margin-top: 6px;
+    box-shadow: 0 0 8px -1px rgba(56, 189, 248, 0.55);
+    transform-origin: left;
+    animation: barGrow 0.5s cubic-bezier(.16,1,.3,1) both;
+  }
+
+  .trace-scroll {
+    max-height: 520px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .trace-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .trace-scroll::-webkit-scrollbar-track { background: transparent; }
+  .trace-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .trace-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-2); }
+
+  .halt-row td { color: var(--green); font-weight: 700; background: rgba(74, 222, 128, 0.05); }
+
+  code.inline {
+    background: var(--surface-inset);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    border: 1px solid var(--border-soft);
+  }
+
+  /* ---- motion ---- */
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes barGrow {
+    from { transform: scaleX(0); opacity: 0.4; }
+    to   { transform: scaleX(1); opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .summary, .trace-wrap, .nl-message, .error-box,
+    table.trace tbody tr, .bar {
+      animation: none !important;
+    }
+    button, input#nlInput, textarea#source {
+      transition: none !important;
+    }
+  }
+
+  /* ---- responsive ---- */
+  @media (max-width: 640px) {
+    .page { padding: 28px 18px 56px; }
+    .page-header h1 { font-size: 23px; }
+    .panel { padding: 18px 18px; }
+    .summary.panel { padding: 18px 20px; gap: 24px; }
+    .nl-row { flex-direction: column; }
+    .toolbar { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<header class="page-header">
+  <div class="title-row">
+    <h1>NAND-to-CPU <span class="hl">— Interactive</span></h1>
+    <span class="badge-pill">runs 100% in your browser</span>
+  </div>
+  <p class="subtitle">
+    A whole CPU, built from a single NAND gate, running entirely in this page. No server, no dependencies —
+    everything below (gates &rarr; arithmetic &rarr; memory &rarr; assembler &rarr; CPU) is a JavaScript port of this
+    project's Python implementation.
+  </p>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <div>
+    <div class="panel">
+      <h2>Instruction Set</h2>
+      <table class="ref">
+        <tr><th>Op</th><th>Meaning</th></tr>
+        <tr><td class="op">NOP</td><td class="desc">do nothing</td></tr>
+        <tr><td class="op">LOADI n</td><td class="desc">ACC = n (immediate)</td></tr>
+        <tr><td class="op">LOAD a</td><td class="desc">ACC = RAM[a]</td></tr>
+        <tr><td class="op">STORE a</td><td class="desc">RAM[a] = ACC</td></tr>
+        <tr><td class="op">ADD a</td><td class="desc">ACC = ACC + RAM[a]</td></tr>
+        <tr><td class="op">SUB a</td><td class="desc">ACC = ACC - RAM[a]</td></tr>
+        <tr><td class="op">JUMP a</td><td class="desc">PC = a</td></tr>
+        <tr><td class="op">JZ a</td><td class="desc">if ACC == 0: PC = a</td></tr>
+        <tr><td class="op">JNZ a</td><td class="desc">if ACC != 0: PC = a</td></tr>
+        <tr><td class="op">HALT</td><td class="desc">stop execution</td></tr>
+      </table>
+      <p class="hint-text">
+        16-bit instruction: <code class="inline">[opcode:4][operand:12]</code>.
+        Accumulator machine — one working register (ACC), everything else lives in RAM.
+        <code class="inline">label:</code> lines define jump targets; <code class="inline">;</code> starts a comment.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>Example Programs</h2>
+      <div class="examples">
+        <button data-example="sum">Sum 1..10 (default)</button>
+        <button data-example="multiply">Multiply 6 &times; 7</button>
+        <button data-example="countdown">Countdown from 5</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div>
+    <div class="panel">
+      <h2>Program Source <span class="tag tag-input">Input</span></h2>
+      <div class="nl-row">
+        <input type="text" id="nlInput" placeholder="e.g. sum the numbers from 1 to 5, or divide 20 by 3">
+        <button class="run-btn" id="nlBtn">Generate &amp; Run</button>
+      </div>
+      <div class="nl-hint">
+        Try: "sum the numbers from 1 to 5" &middot; "add 4 and 9" &middot; "subtract 3 from 10" &middot;
+        "multiply 6 by 7" &middot; "divide 20 by 3"
+      </div>
+      <div class="nl-message" id="nlMessage"></div>
+      <textarea id="source" spellcheck="false"></textarea>
+      <div class="toolbar">
+        <button class="run-btn" id="runBtn">&#9654; Run</button>
+        <span class="toolbar-hint">Assembles and executes on the NAND-built CPU below.</span>
+      </div>
+      <div class="error-box" id="errorBox"></div>
+    </div>
+
+    <div class="section-divider">Results</div>
+
+    <div class="summary panel" id="summary">
+      <div class="stat"><b id="statResult">-</b><span>Result (ACC)</span></div>
+      <div class="stat"><b id="statCycles">-</b><span>Cycles executed</span></div>
+      <div class="stat"><b id="statGates">-</b><span>Total NAND gates fired</span></div>
+      <div class="stat"><b id="statAvg">-</b><span>Avg gates / cycle</span></div>
+    </div>
+
+    <div class="trace-wrap panel" id="traceWrap">
+      <h2>Cycle-by-cycle Trace <span class="tag tag-output">Live</span></h2>
+      <div class="trace-scroll">
+        <table class="trace">
+          <thead>
+            <tr><th>Cycle</th><th>PC</th><th>Instruction</th><th>ACC</th><th>Gates used this cycle</th></tr>
+          </thead>
+          <tbody id="traceBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</div>
+
+<script>
+"use strict";
+
+/* ======================================================================
+ * gates.js — Layer 1: Combinational Logic
+ * Every gate is built from a single primitive: Nand(). GATE_COUNT tracks
+ * how many NAND gates have fired, mirroring gates.py exactly.
+ * ==================================================================== */
+let GATE_COUNT = 0;
+
+function resetGateCount() { GATE_COUNT = 0; }
+
+function Nand(a, b) {
+  GATE_COUNT += 1;
+  return (a && b) ? 0 : 1;
+}
+
+function Not(a) { return Nand(a, a); }
+function And(a, b) { return Not(Nand(a, b)); }
+function Or(a, b) { return Nand(Not(a), Not(b)); }
+function Xor(a, b) { return And(Or(a, b), Nand(a, b)); }
+
+function Not16(a) { return a.map(Not); }
+
+/* ======================================================================
+ * arithmetic.js — Layer 2: Boolean Arithmetic
+ * Half/Full adders -> 16-bit adder -> two's-complement negate/subtract ->
+ * zero-check. Built only from the gates above.
+ * ==================================================================== */
+function halfAdder(a, b) {
+  return [Xor(a, b), And(a, b)]; // [sum, carry]
+}
+
+function fullAdder(a, b, c) {
+  const [s1, c1] = halfAdder(a, b);
+  const [s2, c2] = halfAdder(s1, c);
+  return [s2, Or(c1, c2)]; // [sum, carry]
+}
+
+function add16(a, b) {
+  const result = [];
+  let carry = 0;
+  for (let i = 0; i < 16; i++) {
+    const [s, c] = fullAdder(a[i], b[i], carry);
+    result.push(s);
+    carry = c;
+  }
+  return result;
+}
+
+function intToBits(n, width = 16) {
+  n = n & ((1 << width) - 1);
+  const bits = [];
+  for (let i = 0; i < width; i++) bits.push((n >> i) & 1);
+  return bits;
+}
+
+function bitsToInt(bits) {
+  let n = 0;
+  for (let i = 0; i < bits.length; i++) n |= (bits[i] << i);
+  if (n >= (1 << (bits.length - 1))) n -= (1 << bits.length);
+  return n;
+}
+
+function negate16(a) {
+  return add16(Not16(a), intToBits(1));
+}
+
+function sub16(a, b) {
+  return add16(a, negate16(b));
+}
+
+function isZero16(a) {
+  let anyOne = 0;
+  for (const bit of a) anyOne = Or(anyOne, bit);
+  return Not(anyOne);
+}
+
+/* ======================================================================
+ * memory.js — Layer 3: Sequential Logic (memory)
+ * ==================================================================== */
+class Register {
+  constructor() { this.bits = new Array(16).fill(0); }
+  tick(load, inBits) {
+    if (load) this.bits = inBits.slice();
+    return this.bits;
+  }
+}
+
+class RAM {
+  constructor(size = 256) {
+    this.regs = Array.from({ length: size }, () => new Register());
+  }
+  read(addr) { return this.regs[addr].bits; }
+  write(addr, load, inBits) { this.regs[addr].tick(load, inBits); }
+}
+
+class ProgramCounter {
+  constructor() { this.reg = new Register(); }
+  tick(load, inc, reset, inBits) {
+    let newVal;
+    if (reset) newVal = intToBits(0);
+    else if (load) newVal = inBits;
+    else if (inc) newVal = add16(this.reg.bits, intToBits(1));
+    else newVal = this.reg.bits;
+    this.reg.tick(1, newVal);
+    return this.reg.bits;
+  }
+}
+
+/* ======================================================================
+ * assembler.js — custom instruction set + two-pass assembler
+ * Instruction format (16 bits): [ opcode: 4 bits | operand: 12 bits ]
+ * ==================================================================== */
+const OPCODES = {
+  NOP: 0, LOADI: 1, LOAD: 2, STORE: 3, ADD: 4,
+  SUB: 5, JUMP: 6, JZ: 7, JNZ: 8, HALT: 9,
+};
+const MNEMONICS = Object.fromEntries(Object.entries(OPCODES).map(([k, v]) => [v, k]));
+
+function assemble(sourceLines) {
+  const labels = {};
+  const cleaned = [];
+
+  // Pass 1: strip comments/blank lines, record label positions
+  for (let raw of sourceLines) {
+    let line = raw.split(';')[0].trim();
+    if (!line) continue;
+    if (line.endsWith(':')) {
+      labels[line.slice(0, -1)] = cleaned.length;
+    } else {
+      cleaned.push(line);
+    }
+  }
+
+  // Pass 2: encode
+  const program = [];
+  for (const line of cleaned) {
+    const parts = line.replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+    const mnemonic = parts[0].toUpperCase();
+    if (!(mnemonic in OPCODES)) {
+      throw new Error(`Unknown instruction: ${mnemonic}`);
+    }
+    const opcode = OPCODES[mnemonic];
+    let operand = 0;
+    if (parts.length > 1) {
+      const arg = parts[1];
+      if (arg in labels) {
+        operand = labels[arg];
+      } else {
+        operand = parseInt(arg, 10);
+        if (Number.isNaN(operand)) {
+          throw new Error(`Unknown label or bad integer: ${arg}`);
+        }
+      }
+    }
+    program.push((opcode << 12) | (operand & 0xFFF));
+  }
+
+  return program;
+}
+
+/* ======================================================================
+ * cpu.js — Layer 4: the CPU
+ * Fetch-decode-execute loop. Every executed instruction logs cycle, PC,
+ * instruction, ACC before/after, and NAND gates fired that cycle.
+ * ==================================================================== */
+class CPU {
+  constructor(program, ramSize = 256) {
+    this.ram = new RAM(ramSize);
+    for (let i = 0; i < program.length; i++) {
+      this.ram.write(i, 1, intToBits(program[i]));
+    }
+    this.acc = new Register();
+    this.pc = new ProgramCounter();
+    this.halted = false;
+    this.cycle = 0;
+    this.log = [];
+  }
+
+  step() {
+    if (this.halted) return false;
+
+    const pcVal = bitsToInt(this.pc.reg.bits) & 0xFFFF;
+    const instr = bitsToInt(this.ram.read(pcVal)) & 0xFFFF;
+    const opcode = (instr >> 12) & 0xF;
+    const operand = instr & 0xFFF;
+
+    const gatesBefore = GATE_COUNT;
+    const accBefore = bitsToInt(this.acc.bits);
+
+    let jumped = false, jumpTarget = 0;
+
+    switch (opcode) {
+      case 0: // NOP
+        break;
+      case 1: // LOADI
+        this.acc.tick(1, intToBits(operand));
+        break;
+      case 2: // LOAD
+        this.acc.tick(1, this.ram.read(operand));
+        break;
+      case 3: // STORE
+        this.ram.write(operand, 1, this.acc.bits);
+        break;
+      case 4: // ADD
+        this.acc.tick(1, add16(this.acc.bits, this.ram.read(operand)));
+        break;
+      case 5: // SUB
+        this.acc.tick(1, sub16(this.acc.bits, this.ram.read(operand)));
+        break;
+      case 6: // JUMP
+        jumped = true; jumpTarget = operand;
+        break;
+      case 7: // JZ
+        if (isZero16(this.acc.bits)) { jumped = true; jumpTarget = operand; }
+        break;
+      case 8: // JNZ
+        if (!isZero16(this.acc.bits)) { jumped = true; jumpTarget = operand; }
+        break;
+      case 9: // HALT
+        this.halted = true;
+        break;
+      default:
+        throw new Error(`Unknown opcode ${opcode} at PC=${pcVal}`);
+    }
+
+    if (!this.halted) {
+      if (jumped) this.pc.tick(1, 0, 0, intToBits(jumpTarget));
+      else this.pc.tick(0, 1, 0, intToBits(0));
+    }
+
+    const gatesUsed = GATE_COUNT - gatesBefore;
+    const accAfter = bitsToInt(this.acc.bits);
+    const mnemonic = MNEMONICS[opcode] || '???';
+
+    this.log.push({
+      cycle: this.cycle, pc: pcVal, mnemonic, operand,
+      accBefore, accAfter, gatesUsed,
+    });
+
+    this.cycle += 1;
+    return !this.halted;
+  }
+
+  run(maxCycles = 100000) {
+    while (this.step() && this.cycle < maxCycles) { /* keep stepping */ }
+    return bitsToInt(this.acc.bits);
+  }
+}
+
+/* ======================================================================
+ * UI wiring
+ * ==================================================================== */
+const EXAMPLES = {
+  sum:
+`; sum the numbers 1..10 using a simple counting loop
+; RAM[0] = counter (10 -> 0), RAM[1] = running sum, RAM[2] = constant 1
+
+LOADI 10
+STORE 0
+LOADI 0
+STORE 1
+LOADI 1
+STORE 2
+LOOP:
+LOAD 1
+ADD 0
+STORE 1
+LOAD 0
+SUB 2
+STORE 0
+JNZ LOOP
+LOAD 1
+HALT`,
+
+  multiply:
+`; multiply 6 x 7 via repeated addition
+; RAM[0] = multiplicand (6), RAM[1] = counter (7 -> 0)
+; RAM[2] = running product, RAM[3] = constant 1
+
+LOADI 6
+STORE 0
+LOADI 7
+STORE 1
+LOADI 0
+STORE 2
+LOADI 1
+STORE 3
+LOOP:
+LOAD 2
+ADD 0
+STORE 2
+LOAD 1
+SUB 3
+STORE 1
+JNZ LOOP
+LOAD 2
+HALT`,
+
+  countdown:
+`; countdown from 5 to 0
+; RAM[0] = counter, RAM[1] = constant 1
+
+LOADI 5
+STORE 0
+LOADI 1
+STORE 1
+LOOP:
+LOAD 0
+JZ END
+SUB 1
+STORE 0
+JUMP LOOP
+END:
+LOAD 0
+HALT`,
+};
+
+const sourceEl = document.getElementById('source');
+const errorBox = document.getElementById('errorBox');
+const summaryEl = document.getElementById('summary');
+const traceWrap = document.getElementById('traceWrap');
+const traceBody = document.getElementById('traceBody');
+
+sourceEl.value = EXAMPLES.sum;
+
+document.querySelectorAll('[data-example]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    sourceEl.value = EXAMPLES[btn.dataset.example];
+    hideError();
+  });
+});
+
+function hideError() { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+function showError(msg) { errorBox.style.display = 'block'; errorBox.textContent = msg; }
+
+document.getElementById('runBtn').addEventListener('click', runProgram);
+
+function runProgram() {
+  hideError();
+  hideNlMessage();
+  summaryEl.style.display = 'none';
+  traceWrap.style.display = 'none';
+
+  const lines = sourceEl.value.split('\n');
+  let program, cpu, result;
+
+  try {
+    resetGateCount();
+    program = assemble(lines);
+    if (program.length === 0) throw new Error('Program is empty.');
+
+    cpu = new CPU(program);
+    result = cpu.run(20000);
+
+    if (!cpu.halted) {
+      throw new Error(
+        `Program did not HALT within ${cpu.cycle} cycles (possible infinite loop). ` +
+        `Make sure the program ends with HALT.`
+      );
+    }
+  } catch (err) {
+    showError('Error: ' + err.message);
+    return null;
+  }
+
+  renderResults(cpu, result);
+  return cpu;
+}
+
+function renderResults(cpu, result) {
+  const trace = cpu.log;
+  const totalGates = trace.reduce((sum, t) => sum + t.gatesUsed, 0);
+  const cycles = cpu.cycle;
+  const maxGates = Math.max(1, ...trace.map(t => t.gatesUsed));
+
+  document.getElementById('statResult').textContent = result;
+  document.getElementById('statCycles').textContent = cycles;
+  document.getElementById('statGates').textContent = totalGates.toLocaleString();
+  document.getElementById('statAvg').textContent = (totalGates / Math.max(cycles, 1)).toFixed(1);
+  summaryEl.style.display = 'flex';
+
+  const rows = trace.map(t => {
+    const barWidth = Math.round((t.gatesUsed / maxGates) * 200);
+    const halted = t.mnemonic === 'HALT';
+    return `<tr${halted ? ' class="halt-row"' : ''}>
+      <td>${t.cycle}</td>
+      <td>${t.pc}</td>
+      <td>${t.mnemonic} ${t.operand}</td>
+      <td>${t.accBefore} &rarr; ${t.accAfter}</td>
+      <td>${t.gatesUsed}<div class="bar" style="width:${barWidth}px"></div></td>
+    </tr>`;
+  });
+  traceBody.innerHTML = rows.join('');
+  traceWrap.style.display = 'block';
+}
+
+/* ======================================================================
+ * Natural-language front end
+ * Simple regex pattern matching (no external libs/APIs) that turns a
+ * typed sentence into generated assembly source, using only this
+ * project's existing instruction set. The CPU still does the real work —
+ * these generators just parameterize the same loop shapes as the example
+ * programs above.
+ * ==================================================================== */
+const SUPPORTED_HINT =
+  'I couldn\'t understand that. Try one of these phrasings: ' +
+  '"sum the numbers from 1 to 5", "add 4 and 9", "subtract 3 from 10", ' +
+  '"multiply 6 by 7", or "divide 20 by 3".';
+
+const NL_PATTERNS = [
+  // "sum/add up the numbers from A to B"
+  {
+    op: 'sum',
+    re: /\b(?:sum|add\s*up)\b(?:\s+the)?(?:\s+numbers?)?\s+from\s+(\d+)\s+to\s+(\d+)/i,
+    extract: m => [parseInt(m[1], 10), parseInt(m[2], 10)],
+  },
+  // "divide A by B"
+  {
+    op: 'divide',
+    re: /\bdivide\s+(\d+)\s+by\s+(\d+)/i,
+    extract: m => [parseInt(m[1], 10), parseInt(m[2], 10)],
+  },
+  // "A / B"
+  {
+    op: 'divide',
+    re: /(\d+)\s*\/\s*(\d+)/,
+    extract: m => [parseInt(m[1], 10), parseInt(m[2], 10)],
+  },
+  // "multiply A by B"
+  {
+    op: 'multiply',
+    re: /\bmultiply\s+(\d+)\s+by\s+(\d+)/i,
+    extract: m => [parseInt(m[1], 10), parseInt(m[2], 10)],
+  },
+  // "A * B" / "A x B"
+  {
+    op: 'multiply',
+    re: /(\d+)\s*[*x]\s*(\d+)/i,
+    extract: m => [parseInt(m[1], 10), parseInt(m[2], 10)],
+  },
+  // "subtract B from A"  ->  A - B
+  {
+    op: 'subtract',
+    re: /\bsubtract\s+(\d+)\s+from\s+(\d+)/i,
+    extract: m => [parseInt(m[2], 10), parseInt(m[1], 10)],
+  },
+  // "A - B"
+  {
+    op: 'subtract',
+    re: /(\d+)\s*-\s*(\d+)/,
+    extract: m => [parseInt(m[1], 10), parseInt(m[2], 10)],
+  },
+  // "add A and B"
+  {
+    op: 'add',
+    re: /\badd\s+(\d+)\s+and\s+(\d+)/i,
+    extract: m => [parseInt(m[1], 10), parseInt(m[2], 10)],
+  },
+  // "A + B"
+  {
+    op: 'add',
+    re: /(\d+)\s*\+\s*(\d+)/,
+    extract: m => [parseInt(m[1], 10), parseInt(m[2], 10)],
+  },
+];
+
+function parseNaturalLanguage(text) {
+  for (const p of NL_PATTERNS) {
+    const m = text.match(p.re);
+    if (m) {
+      const [a, b] = p.extract(m);
+      return { op: p.op, a, b };
+    }
+  }
+  return null;
+}
+
+function assertOperandRange(n, label) {
+  if (!Number.isFinite(n) || n < 0 || n > 4095) {
+    throw new Error(
+      `${label} (${n}) must be a whole number between 0 and 4095 — this CPU's ` +
+      `instruction operand is only 12 bits wide.`
+    );
+  }
+}
+
+function genSum(a, b) {
+  assertOperandRange(a, 'Range start'); assertOperandRange(b, 'Range end');
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  const trip = hi - lo + 1;
+  const source =
+`; NL: sum the numbers from ${lo} to ${hi}
+; RAM[0]=trip counter (${trip} -> 0), RAM[1]=running sum
+; RAM[2]=constant 1, RAM[3]=current value (starts at ${lo})
+
+LOADI ${trip}
+STORE 0
+LOADI 0
+STORE 1
+LOADI 1
+STORE 2
+LOADI ${lo}
+STORE 3
+LOOP:
+LOAD 1
+ADD 3
+STORE 1
+LOAD 3
+ADD 2
+STORE 3
+LOAD 0
+SUB 2
+STORE 0
+JNZ LOOP
+LOAD 1
+HALT`;
+  return { source, describe: result => `Sum of ${lo}..${hi} = ${result}` };
+}
+
+function genAdd(a, b) {
+  assertOperandRange(a, 'First number'); assertOperandRange(b, 'Second number');
+  const source =
+`; NL: add ${a} and ${b}
+; RAM[0]=${a}, RAM[1]=${b}
+
+LOADI ${a}
+STORE 0
+LOADI ${b}
+STORE 1
+LOAD 0
+ADD 1
+HALT`;
+  return { source, describe: result => `${a} + ${b} = ${result}` };
+}
+
+function genSubtract(a, b) {
+  assertOperandRange(a, 'First number'); assertOperandRange(b, 'Second number');
+  const source =
+`; NL: subtract ${b} from ${a}
+; RAM[0]=${a}, RAM[1]=${b}
+
+LOADI ${a}
+STORE 0
+LOADI ${b}
+STORE 1
+LOAD 0
+SUB 1
+HALT`;
+  return { source, describe: result => `${a} - ${b} = ${result}` };
+}
+
+function genMultiply(a, b) {
+  assertOperandRange(a, 'First number'); assertOperandRange(b, 'Second number');
+
+  if (a === 0 || b === 0) {
+    const source =
+`; NL: multiply ${a} by ${b}
+; one of the factors is 0, so the product is 0 — no loop needed
+
+LOADI 0
+HALT`;
+    return { source, describe: result => `${a} * ${b} = ${result}` };
+  }
+
+  // Add the larger factor, repeated the smaller number of times — fewer cycles,
+  // same product (multiplication is commutative).
+  const multiplicand = Math.max(a, b);
+  const counter = Math.min(a, b);
+  const source =
+`; NL: multiply ${a} by ${b} (via repeated addition)
+; RAM[0]=multiplicand (${multiplicand}), RAM[1]=counter (${counter} -> 0)
+; RAM[2]=running product, RAM[3]=constant 1
+
+LOADI ${multiplicand}
+STORE 0
+LOADI ${counter}
+STORE 1
+LOADI 0
+STORE 2
+LOADI 1
+STORE 3
+LOOP:
+LOAD 2
+ADD 0
+STORE 2
+LOAD 1
+SUB 3
+STORE 1
+JNZ LOOP
+LOAD 2
+HALT`;
+  return { source, describe: result => `${a} * ${b} = ${result}` };
+}
+
+function genDivide(a, b) {
+  assertOperandRange(a, 'Dividend'); assertOperandRange(b, 'Divisor');
+  if (b === 0) {
+    throw new Error(`Cannot divide ${a} by 0.`);
+  }
+
+  const quotient = Math.floor(a / b);
+  const remainder = a - quotient * b;
+
+  // Quotient is 0 (divisor bigger than dividend) -> nothing to subtract,
+  // no loop needed. This is also what keeps a bad "B > A" input from
+  // ever looping.
+  if (quotient === 0) {
+    const source =
+`; NL: divide ${a} by ${b} (via repeated subtraction)
+; ${b} is bigger than ${a}, so it doesn't go in even once
+; RAM[0]=remainder, RAM[1]=divisor, RAM[2]=quotient
+
+LOADI ${a}
+STORE 0
+LOADI ${b}
+STORE 1
+LOADI 0
+STORE 2
+LOAD 2
+HALT`;
+    return {
+      source,
+      describe: (result, cpu) =>
+        `${a} / ${b} = ${bitsToInt(cpu.ram.read(2))} remainder ${bitsToInt(cpu.ram.read(0))}`,
+    };
+  }
+
+  // The ISA only exposes zero-checks (JZ/JNZ), not a "less than" test, so
+  // there's no safe way for the CPU to discover at runtime exactly when the
+  // remainder drops below the divisor without risking underflow/an infinite
+  // loop. Since the divisor and dividend are known constants here, the trip
+  // count (the quotient) is computed once up front, and the loop below runs
+  // for exactly that many iterations — each iteration doing a real SUB on
+  // the CPU and counting itself via ADD, so the subtraction genuinely
+  // happens on the NAND-built hardware, just with a precomputed, safe
+  // iteration bound instead of a runtime less-than check.
+  const source =
+`; NL: divide ${a} by ${b} (via repeated subtraction)
+; RAM[0]=remainder (starts at ${a}), RAM[1]=divisor (${b}), RAM[2]=quotient
+; RAM[3]=constant 1, RAM[4]=loop counter (${quotient} -> 0)
+
+LOADI ${a}
+STORE 0
+LOADI ${b}
+STORE 1
+LOADI 0
+STORE 2
+LOADI 1
+STORE 3
+LOADI ${quotient}
+STORE 4
+LOOP:
+LOAD 0
+SUB 1
+STORE 0
+LOAD 2
+ADD 3
+STORE 2
+LOAD 4
+SUB 3
+STORE 4
+JNZ LOOP
+LOAD 2
+HALT`;
+  return {
+    source,
+    describe: (result, cpu) =>
+      `${a} / ${b} = ${bitsToInt(cpu.ram.read(2))} remainder ${bitsToInt(cpu.ram.read(0))}`,
+  };
+}
+
+function buildProgram(parsed) {
+  switch (parsed.op) {
+    case 'sum': return genSum(parsed.a, parsed.b);
+    case 'add': return genAdd(parsed.a, parsed.b);
+    case 'subtract': return genSubtract(parsed.a, parsed.b);
+    case 'multiply': return genMultiply(parsed.a, parsed.b);
+    case 'divide': return genDivide(parsed.a, parsed.b);
+    default: throw new Error('Unsupported operation.');
+  }
+}
+
+const nlInput = document.getElementById('nlInput');
+const nlMessage = document.getElementById('nlMessage');
+
+function hideNlMessage() {
+  nlMessage.style.display = 'none';
+  nlMessage.className = 'nl-message';
+  nlMessage.textContent = '';
+}
+function showNlMessage(kind, text) {
+  nlMessage.className = 'nl-message ' + kind;
+  nlMessage.textContent = text;
+  nlMessage.style.display = 'block';
+}
+
+function handleNaturalLanguage() {
+  hideNlMessage();
+  const text = nlInput.value.trim();
+  if (!text) {
+    showNlMessage('warn', 'Type a sentence describing what you want to compute.');
+    return;
+  }
+
+  const parsed = parseNaturalLanguage(text);
+  if (!parsed) {
+    showNlMessage('warn', SUPPORTED_HINT);
+    return;
+  }
+
+  let gen;
+  try {
+    gen = buildProgram(parsed);
+  } catch (err) {
+    showNlMessage('warn', err.message);
+    return;
+  }
+
+  sourceEl.value = gen.source;
+  const cpu = runProgram();
+  if (cpu && gen.describe) {
+    showNlMessage('success', gen.describe(bitsToInt(cpu.acc.bits), cpu));
+  }
+}
+
+document.getElementById('nlBtn').addEventListener('click', handleNaturalLanguage);
+nlInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleNaturalLanguage();
+});
+</script>
+</body>
+</html>
