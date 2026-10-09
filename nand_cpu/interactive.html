@@ -625,10 +625,27 @@ function Nand(a, b) {
   return (a && b) ? 0 : 1;
 }
 
+// GATE-COUNTING RULE FOR FEEDBACK CIRCUITS (latches/flip-flops, the
+// registers section below): a cross-coupled NAND pair has no single-pass
+// evaluation order — finding its settled output means re-evaluating the
+// same two gates until the values stop changing. That iteration is a
+// software artifact of simulating feedback with no propagation delay; in
+// real hardware it's still just N physical gates, each firing once per
+// clock phase, not once per settle iteration. So feedback circuits must
+// NOT call the counted Nand() during their internal settle loop — they
+// use nandRaw (uncounted) for that, then call countPhysical(n) exactly
+// once per invocation to attribute the real gate count, independent of
+// how many iterations settling took.
+function countPhysical(n) { GATE_COUNT += n; }
+function nandRaw(a, b) { return (a && b) ? 0 : 1; }
+
 function Not(a) { return Nand(a, a); }
 function And(a, b) { return Not(Nand(a, b)); }
 function Or(a, b) { return Nand(Not(a), Not(b)); }
 function Xor(a, b) { return And(Or(a, b), Nand(a, b)); }
+
+function Mux(a, b, sel) { return Or(And(a, Not(sel)), And(b, sel)); } // sel=0->a, sel=1->b
+function DMux(inp, sel) { return [And(inp, Not(sel)), And(inp, sel)]; } // sel=0->(in,0), sel=1->(0,in)
 
 function Not16(a) { return a.map(Not); }
 
@@ -715,7 +732,147 @@ function sub16Flags(a, b) {
 }
 
 /* ======================================================================
+ * registers.js — Layer 3b: memory built from NAND gates, not modelled.
+ * memory.js's Register/RAM below are a BEHAVIOURAL model. This section
+ * instead builds memory the way real hardware does, bottom-up:
+ *   cross-coupled NAND pair (SR latch)
+ *     -> gated D latch (enable, so S/R can never both be asserted)
+ *       -> master-slave D flip-flop (captures only on the clock edge)
+ *         -> Bit (1-bit cell with a load input)
+ *           -> GateRegister (16 Bits sharing one load line)
+ *             -> RAM8 (8 GateRegisters behind a 3-bit address decoder)
+ * See countPhysical's comment above for the gate-counting rule this
+ * relies on.
+ * ==================================================================== */
+const SR_LATCH_GATES = 2; // the two cross-coupled NANDs themselves
+
+function srLatch(s, r, prevQ, prevQn, maxIters = 16) {
+  // Cross-coupled NAND SR latch. s/r active-HIGH: set=1 -> q=1, reset=1
+  // -> q=0, s=r=0 holds. FORBIDDEN INPUT: s=1 and r=1 together drives
+  // both core gates toward output 1 (via their inverted input going to
+  // 0), breaking the Q/Qn complementary invariant; a real latch's
+  // resolution on release is a propagation-delay race (undefined) —
+  // this zero-delay sim settles deterministically at q=qn=1 instead.
+  const sBar = Not(s);  // counted normally
+  const rBar = Not(r);  // counted normally
+
+  let q = prevQ, qn = prevQn;
+  let settled = false;
+  for (let i = 0; i < maxIters; i++) {
+    const newQ = nandRaw(sBar, qn);
+    const newQn = nandRaw(rBar, q);
+    if (newQ === q && newQn === qn) { settled = true; break; }
+    q = newQ; qn = newQn;
+  }
+  if (!settled) throw new Error(`SR latch did not settle within ${maxIters} iterations`);
+
+  countPhysical(SR_LATCH_GATES);
+  return [q, qn];
+}
+
+function dLatch(d, en, prevQ, prevQn) {
+  // Transparent while en=1; holds while en=0. s=AND(d,en), r=AND(NOT(d),en)
+  // can never both be 1, so the SR latch's forbidden input is unreachable.
+  const notD = Not(d);
+  const s = And(d, en);
+  const r = And(notD, en);
+  return srLatch(s, r, prevQ, prevQn);
+}
+
+class DFF {
+  // Edge-triggered 1-bit flip-flop: a master (enabled while clk=0,
+  // transparent to D) feeding a slave (enabled while clk=1, transparent
+  // to the master's held value). One tick() runs clk 0->1 once.
+  constructor() {
+    // (q=0,qn=1) is the self-consistent power-up state; (0,0) is NOT a
+    // valid SR rest state — under hold it's a zero-delay oscillator.
+    this.masterQ = 0; this.masterQn = 1;
+    this.slaveQ = 0; this.slaveQn = 1;
+  }
+  get q() { return this.slaveQ; }
+  phaseLow(d) {
+    // clk=0: master transparent, samples d; slave holds — Q unaffected.
+    [this.masterQ, this.masterQn] = dLatch(d, 1, this.masterQ, this.masterQn);
+    return this.slaveQ;
+  }
+  phaseHigh() {
+    // clk=1: master now holds (its enable=NOT(clk)=0); slave transparent,
+    // Q takes on the master's held value — the clock edge completing.
+    [this.slaveQ, this.slaveQn] = dLatch(this.masterQ, 1, this.slaveQ, this.slaveQn);
+    [this.masterQ, this.masterQn] = dLatch(this.masterQ, 0, this.masterQ, this.masterQn);
+    return this.slaveQ;
+  }
+  tick(d) {
+    this.phaseLow(d);
+    return this.phaseHigh();
+  }
+}
+
+class Bit {
+  // 1-bit register with a load control: Bit(d,load) = DFF(Mux(Q,d,load)).
+  constructor() { this.dff = new DFF(); }
+  get value() { return this.dff.q; }
+  tick(load, d) {
+    const muxOut = Mux(this.dff.q, d, load);
+    return this.dff.tick(muxOut);
+  }
+}
+
+class GateRegister {
+  // 16-bit register built from 16 Bit cells sharing one load line — the
+  // gate-built counterpart to Register below. Same interface: .bits,
+  // .tick(load, inBits).
+  constructor() { this.cells = Array.from({ length: 16 }, () => new Bit()); }
+  get bits() { return this.cells.map(c => c.value); }
+  tick(load, inBits) {
+    for (let i = 0; i < 16; i++) this.cells[i].tick(load, inBits[i]);
+    return this.bits;
+  }
+}
+
+function demux8(sel3) {
+  // 3-bit select -> 8 one-hot enable lines (LSB-first), built from DMux.
+  const [a, b] = DMux(1, sel3[2]);
+  const [a0, a1] = DMux(a, sel3[1]);
+  const [b0, b1] = DMux(b, sel3[1]);
+  const flat = [];
+  for (const half of [a0, a1, b0, b1]) {
+    const [lo, hi] = DMux(half, sel3[0]);
+    flat.push(lo, hi);
+  }
+  return flat; // flat[i] = 1 iff sel3 == i
+}
+
+class RAM8 {
+  // 8-word x 16-bit RAM, gate-built: 8 GateRegisters behind a 3-bit
+  // DMux-based decoder. Proof that a NAND register array behaves like
+  // real memory; the CPU's main 256-word RAM stays the behavioural
+  // model (below) — RAM8 is not wired into the CPU, only tested against it.
+  constructor() { this.regs = Array.from({ length: 8 }, () => new GateRegister()); }
+  read(addr3) {
+    const enables = demux8(addr3);
+    let result = new Array(16).fill(0);
+    for (let r = 0; r < 8; r++) {
+      const bits = this.regs[r].bits;
+      result = result.map((cur, i) => Mux(cur, bits[i], enables[r]));
+    }
+    return result;
+  }
+  write(addr3, load, inBits) {
+    const enables = demux8(addr3);
+    for (let r = 0; r < 8; r++) this.regs[r].tick(And(load, enables[r]), inBits);
+  }
+}
+
+/* ======================================================================
  * memory.js — Layer 3: Sequential Logic (memory)
+ * Register/RAM are a BEHAVIOURAL model (see registers.js above for the
+ * gate-built version). Kept for the CPU's 256-word program/data memory,
+ * since gate-building all 256 words would cost millions of simulated
+ * gates per cycle for no behavioural difference. ProgramCounter now
+ * holds its value in a GateRegister — the control logic below (which
+ * value to latch) is ordinary combinational code; the latching itself
+ * is done by 16 real NAND-built flip-flops, not a JS assignment.
  * ==================================================================== */
 class Register {
   constructor() { this.bits = new Array(16).fill(0); }
@@ -734,7 +891,7 @@ class RAM {
 }
 
 class ProgramCounter {
-  constructor() { this.reg = new Register(); }
+  constructor() { this.reg = new GateRegister(); }
   tick(load, inc, reset, inBits) {
     let newVal;
     if (reset) newVal = intToBits(0);
@@ -810,7 +967,13 @@ class CPU {
     for (let i = 0; i < program.length; i++) {
       this.ram.write(i, 1, intToBits(program[i]));
     }
-    this.acc = new Register();
+    // ACC, the program counter (inside ProgramCounter) and the
+    // instruction register are gate-built (GateRegister): 16 real
+    // NAND-chained flip-flops each, not a JS assignment. The 256-word
+    // RAM stays the behavioural model — see memory.js's comment above;
+    // RAM8 is the gate-built proof instead.
+    this.acc = new GateRegister();
+    this.ir = new GateRegister();
     this.pc = new ProgramCounter();
     this.halted = false;
     this.cycle = 0;
@@ -823,12 +986,21 @@ class CPU {
   step() {
     if (this.halted) return false;
 
+    // Snapshot the gate counter before anything this cycle touches a
+    // gate — including fetch — so gatesUsed below attributes every gate
+    // fired this cycle (IR load included) to this cycle's log entry.
+    const gatesBefore = GATE_COUNT;
+
     const pcVal = bitsToInt(this.pc.reg.bits) & 0xFFFF;
-    const instr = bitsToInt(this.ram.read(pcVal)) & 0xFFFF;
+    // Fetch: the instruction register always loads every cycle (real
+    // hardware's IR captures whatever the memory bus drives on every
+    // fetch, unconditionally) — decode reads from the IR's own
+    // gate-built flip-flops, not straight off the RAM read.
+    this.ir.tick(1, this.ram.read(pcVal));
+    const instr = bitsToInt(this.ir.bits) & 0xFFFF;
     const opcode = (instr >> 12) & 0xF;
     const operand = instr & 0xFFF;
 
-    const gatesBefore = GATE_COUNT;
     const accBefore = bitsToInt(this.acc.bits);
 
     let jumped = false, jumpTarget = 0;

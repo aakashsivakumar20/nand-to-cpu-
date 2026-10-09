@@ -13,7 +13,8 @@ report).
 
 import gates
 from arithmetic import add16, sub16, add16_flags, sub16_flags, is_zero16, int_to_bits, bits_to_int
-from memory import Register, RAM, ProgramCounter
+from memory import RAM, ProgramCounter
+from registers import GateRegister
 from assembler import MNEMONICS
 
 
@@ -23,7 +24,15 @@ class CPU:
         for i, instr in enumerate(program):
             self.ram.write(i, 1, int_to_bits(instr))
 
-        self.acc = Register()
+        # ACC, the program counter (inside ProgramCounter) and the
+        # instruction register are gate-built (registers.GateRegister):
+        # 16 real NAND-chained flip-flops each, not a Python list
+        # assignment. The 256-word RAM stays the behavioural model
+        # (see memory.py's docstring) — gate-building all of it would
+        # cost millions of simulated gates per cycle for no behavioural
+        # difference; registers.RAM8 is the gate-built proof instead.
+        self.acc = GateRegister()
+        self.ir = GateRegister()
         self.pc = ProgramCounter()
         self.halted = False
         self.trace = trace
@@ -38,12 +47,22 @@ class CPU:
         if self.halted:
             return False
 
+        # Snapshot the gate counter before anything this cycle touches a
+        # gate — including fetch — so gates_used below attributes every
+        # gate fired this cycle (IR load included) to this cycle's log
+        # entry, not to the next one or to no entry at all.
+        gates_before = gates.GATE_COUNT
+
         pc_val = bits_to_int(self.pc.reg.bits) & 0xFFFF
-        instr = bits_to_int(self.ram.read(pc_val)) & 0xFFFF
+        # Fetch: the instruction register always loads every cycle (real
+        # hardware's IR captures whatever the memory bus is driving on
+        # every fetch, unconditionally) — decode reads from the IR's own
+        # gate-built flip-flops, not straight off the RAM read.
+        self.ir.tick(1, self.ram.read(pc_val))
+        instr = bits_to_int(self.ir.bits) & 0xFFFF
         opcode = (instr >> 12) & 0xF
         operand = instr & 0xFFF
 
-        gates_before = gates.GATE_COUNT
         acc_before = bits_to_int(self.acc.bits)
 
         jumped, jump_target = False, 0
