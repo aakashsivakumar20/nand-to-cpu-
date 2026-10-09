@@ -12,12 +12,16 @@ OPCODES = {
     'LOADI': 1,  # ACC = immediate value
     'LOAD':  2,  # ACC = RAM[addr]
     'STORE': 3,  # RAM[addr] = ACC
-    'ADD':   4,  # ACC = ACC + RAM[addr]
-    'SUB':   5,  # ACC = ACC - RAM[addr]
+    'ADD':   4,  # ACC = ACC + RAM[addr]; sets Z/N/V
+    'SUB':   5,  # ACC = ACC - RAM[addr]; sets Z/N/V
     'JUMP':  6,  # PC = addr
     'JZ':    7,  # if ACC == 0: PC = addr
     'JNZ':   8,  # if ACC != 0: PC = addr
     'HALT':  9,  # stop execution
+    'JLT':   10,  # if N XOR V (signed less-than from the last ADD/SUB/CMP; after
+                  # CMP addr this means ACC < RAM[addr]): PC = addr
+    'JOV':   11,  # if V (signed overflow from the last ADD/SUB/CMP): PC = addr
+    'CMP':   12,  # ACC - RAM[addr], sets Z/N/V only — ACC is left unchanged
 }
 
 MNEMONICS = {v: k for k, v in OPCODES.items()}

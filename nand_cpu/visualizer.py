@@ -10,6 +10,7 @@ def generate_html_report(cpu, result, out_path):
     total_gates = sum(t['gates_used'] for t in trace)
     cycles = cpu.cycle
     max_gates = max((t['gates_used'] for t in trace), default=1) or 1
+    overflowed = any(t['v'] for t in trace)
 
     rows = []
     for t in trace:
@@ -20,8 +21,13 @@ def generate_html_report(cpu, result, out_path):
           <td>{t['pc']}</td>
           <td>{t['mnemonic']} {t['operand']}</td>
           <td>{t['acc_before']} &rarr; {t['acc_after']}</td>
+          <td>Z={t['z']} N={t['n']} V={t['v']}</td>
           <td>{t['gates_used']}<div class="bar" style="width:{bar_width}px"></div></td>
         </tr>""")
+
+    overflow_banner = ("""
+<div class="overflow-warning">&#9888; Overflow: result wrapped (16-bit signed)</div>"""
+                        if overflowed else "")
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -40,11 +46,16 @@ def generate_html_report(cpu, result, out_path):
   th {{ color:#7dd3fc; background:#1a1d27; position:sticky; top:0; }}
   .bar {{ height:6px; background:linear-gradient(90deg,#7dd3fc,#38bdf8); border-radius:3px; margin-top:5px; }}
   tr:hover {{ background:#1c2030; }}
+  .overflow-warning {{
+    background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.45);
+    color: #fbbf24; border-radius: 8px; padding: 12px 18px; margin-bottom: 20px; font-weight: 600;
+  }}
 </style>
 </head>
 <body>
 <h1>NAND-to-CPU Execution Trace</h1>
 <div class="subtitle">Every value here is the product of primitive NAND gates only.</div>
+{overflow_banner}
 <div class="summary">
   <div class="stat"><b>{result}</b><span>Result</span></div>
   <div class="stat"><b>{cycles}</b><span>Cycles executed</span></div>
@@ -52,7 +63,7 @@ def generate_html_report(cpu, result, out_path):
   <div class="stat"><b>{total_gates / max(cycles,1):.1f}</b><span>Avg gates / cycle</span></div>
 </div>
 <table>
-<tr><th>Cycle</th><th>PC</th><th>Instruction</th><th>ACC</th><th>Gates used this cycle</th></tr>
+<tr><th>Cycle</th><th>PC</th><th>Instruction</th><th>ACC</th><th>Flags</th><th>Gates used this cycle</th></tr>
 {''.join(rows)}
 </table>
 </body>

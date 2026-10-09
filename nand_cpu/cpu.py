@@ -6,12 +6,13 @@ instruction set (assembler.py) together into a fetch-decode-execute
 loop that runs a whole program by itself, cycle by cycle.
 
 Every executed instruction logs: cycle number, PC, instruction, ACC
-before/after, and how many NAND gates fired during that cycle (this
-is the raw data the visualizer turns into a report).
+before/after, the Z/N/V status flags, and how many NAND gates fired
+during that cycle (this is the raw data the visualizer turns into a
+report).
 """
 
 import gates
-from arithmetic import add16, sub16, is_zero16, int_to_bits, bits_to_int
+from arithmetic import add16, sub16, add16_flags, sub16_flags, is_zero16, int_to_bits, bits_to_int
 from memory import Register, RAM, ProgramCounter
 from assembler import MNEMONICS
 
@@ -28,6 +29,10 @@ class CPU:
         self.trace = trace
         self.cycle = 0
         self.log = []  # full execution trace, used by the visualizer
+        # Status register: set only by ADD/SUB/CMP, like a real ALU flags
+        # register. Z = zero, N = sign bit, V = signed (two's-complement)
+        # overflow.
+        self.flags = {'z': 0, 'n': 0, 'v': 0}
 
     def step(self):
         if self.halted:
@@ -51,10 +56,14 @@ class CPU:
             self.acc.tick(1, self.ram.read(operand))
         elif opcode == 3:    # STORE
             self.ram.write(operand, 1, self.acc.bits)
-        elif opcode == 4:    # ADD
-            self.acc.tick(1, add16(self.acc.bits, self.ram.read(operand)))
-        elif opcode == 5:    # SUB
-            self.acc.tick(1, sub16(self.acc.bits, self.ram.read(operand)))
+        elif opcode == 4:    # ADD — writes ACC and sets Z/N/V
+            result, z, n, v = add16_flags(self.acc.bits, self.ram.read(operand))
+            self.acc.tick(1, result)
+            self.flags = {'z': z, 'n': n, 'v': v}
+        elif opcode == 5:    # SUB — writes ACC and sets Z/N/V
+            result, z, n, v = sub16_flags(self.acc.bits, self.ram.read(operand))
+            self.acc.tick(1, result)
+            self.flags = {'z': z, 'n': n, 'v': v}
         elif opcode == 6:    # JUMP
             jumped, jump_target = True, operand
         elif opcode == 7:    # JZ
@@ -65,6 +74,16 @@ class CPU:
                 jumped, jump_target = True, operand
         elif opcode == 9:    # HALT
             self.halted = True
+        elif opcode == 10:   # JLT: signed less-than (N XOR V) from the last ADD/SUB/CMP;
+                             # after CMP addr this means ACC < RAM[addr]
+            if gates.Xor(self.flags['n'], self.flags['v']):
+                jumped, jump_target = True, operand
+        elif opcode == 11:   # JOV: signed overflow set by the last ADD/SUB/CMP
+            if self.flags['v']:
+                jumped, jump_target = True, operand
+        elif opcode == 12:   # CMP — same as SUB but ACC is left unchanged
+            _, z, n, v = sub16_flags(self.acc.bits, self.ram.read(operand))
+            self.flags = {'z': z, 'n': n, 'v': v}
 
         if not self.halted:
             if jumped:
@@ -80,12 +99,15 @@ class CPU:
             'cycle': self.cycle, 'pc': pc_val, 'mnemonic': mnemonic,
             'operand': operand, 'acc_before': acc_before,
             'acc_after': acc_after, 'gates_used': gates_used,
+            'z': self.flags['z'], 'n': self.flags['n'], 'v': self.flags['v'],
         }
         self.log.append(record)
 
         if self.trace:
             print(f"cycle {self.cycle:3d} | PC={pc_val:3d} | {mnemonic:6s} {operand:4d} "
-                  f"| ACC {acc_before:6d} -> {acc_after:6d} | gates used: {gates_used}")
+                  f"| ACC {acc_before:6d} -> {acc_after:6d} "
+                  f"| Z={self.flags['z']} N={self.flags['n']} V={self.flags['v']} "
+                  f"| gates used: {gates_used}")
 
         self.cycle += 1
         return not self.halted

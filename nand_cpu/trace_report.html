@@ -15,564 +15,647 @@
   th { color:#7dd3fc; background:#1a1d27; position:sticky; top:0; }
   .bar { height:6px; background:linear-gradient(90deg,#7dd3fc,#38bdf8); border-radius:3px; margin-top:5px; }
   tr:hover { background:#1c2030; }
+  .overflow-warning {
+    background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.45);
+    color: #fbbf24; border-radius: 8px; padding: 12px 18px; margin-bottom: 20px; font-weight: 600;
+  }
 </style>
 </head>
 <body>
 <h1>NAND-to-CPU Execution Trace</h1>
 <div class="subtitle">Every value here is the product of primitive NAND gates only.</div>
+
 <div class="summary">
   <div class="stat"><b>55</b><span>Result</span></div>
   <div class="stat"><b>78</b><span>Cycles executed</span></div>
-  <div class="stat"><b>30442</b><span>Total NAND gates fired</span></div>
-  <div class="stat"><b>390.3</b><span>Avg gates / cycle</span></div>
+  <div class="stat"><b>31712</b><span>Total NAND gates fired</span></div>
+  <div class="stat"><b>406.6</b><span>Avg gates / cycle</span></div>
 </div>
 <table>
-<tr><th>Cycle</th><th>PC</th><th>Instruction</th><th>ACC</th><th>Gates used this cycle</th></tr>
+<tr><th>Cycle</th><th>PC</th><th>Instruction</th><th>ACC</th><th>Flags</th><th>Gates used this cycle</th></tr>
 
         <tr>
           <td>0</td>
           <td>0</td>
           <td>LOADI 10</td>
           <td>0 &rarr; 10</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>1</td>
           <td>1</td>
           <td>STORE 0</td>
           <td>10 &rarr; 10</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>2</td>
           <td>2</td>
           <td>LOADI 0</td>
           <td>10 &rarr; 0</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>3</td>
           <td>3</td>
           <td>STORE 1</td>
           <td>0 &rarr; 0</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>4</td>
           <td>4</td>
           <td>LOADI 1</td>
           <td>0 &rarr; 1</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>5</td>
           <td>5</td>
           <td>STORE 2</td>
           <td>1 &rarr; 1</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>6</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>1 &rarr; 0</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>7</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>0 &rarr; 10</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>8</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>10 &rarr; 10</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>9</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>10 &rarr; 10</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>10</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>10 &rarr; 9</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>11</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>9 &rarr; 9</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>12</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>9 &rarr; 9</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>13</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>9 &rarr; 10</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>14</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>10 &rarr; 19</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>15</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>19 &rarr; 19</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>16</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>19 &rarr; 9</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>17</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>9 &rarr; 8</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>18</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>8 &rarr; 8</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>19</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>8 &rarr; 8</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>20</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>8 &rarr; 19</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>21</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>19 &rarr; 27</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>22</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>27 &rarr; 27</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>23</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>27 &rarr; 8</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>24</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>8 &rarr; 7</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>25</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>7 &rarr; 7</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>26</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>7 &rarr; 7</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>27</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>7 &rarr; 27</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>28</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>27 &rarr; 34</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>29</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>34 &rarr; 34</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>30</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>34 &rarr; 7</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>31</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>7 &rarr; 6</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>32</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>6 &rarr; 6</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>33</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>6 &rarr; 6</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>34</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>6 &rarr; 34</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>35</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>34 &rarr; 40</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>36</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>40 &rarr; 40</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>37</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>40 &rarr; 6</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>38</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>6 &rarr; 5</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>39</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>5 &rarr; 5</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>40</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>5 &rarr; 5</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>41</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>5 &rarr; 40</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>42</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>40 &rarr; 45</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>43</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>45 &rarr; 45</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>44</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>45 &rarr; 5</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>45</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>5 &rarr; 4</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>46</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>4 &rarr; 4</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>47</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>4 &rarr; 4</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>48</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>4 &rarr; 45</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>49</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>45 &rarr; 49</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>50</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>49 &rarr; 49</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>51</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>49 &rarr; 4</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>52</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>4 &rarr; 3</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>53</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>3 &rarr; 3</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>54</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>3 &rarr; 3</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>55</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>3 &rarr; 49</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>56</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>49 &rarr; 52</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>57</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>52 &rarr; 52</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>58</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>52 &rarr; 3</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>59</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>3 &rarr; 2</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>60</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>2 &rarr; 2</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>61</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>2 &rarr; 2</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>62</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>2 &rarr; 52</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>63</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>52 &rarr; 54</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>64</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>54 &rarr; 54</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>65</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>54 &rarr; 2</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>66</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>2 &rarr; 1</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>67</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>1 &rarr; 1</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>68</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>1 &rarr; 1</td>
-          <td>49<div class="bar" style="width:10px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>49<div class="bar" style="width:9px"></div></td>
         </tr>
         <tr>
           <td>69</td>
           <td>6</td>
           <td>LOAD 1</td>
           <td>1 &rarr; 54</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>70</td>
           <td>7</td>
           <td>ADD 0</td>
           <td>54 &rarr; 55</td>
-          <td>608<div class="bar" style="width:131px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>672<div class="bar" style="width:135px"></div></td>
         </tr>
         <tr>
           <td>71</td>
           <td>8</td>
           <td>STORE 1</td>
           <td>55 &rarr; 55</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>72</td>
           <td>9</td>
           <td>LOAD 0</td>
           <td>55 &rarr; 1</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=0 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>73</td>
           <td>10</td>
           <td>SUB 2</td>
           <td>1 &rarr; 0</td>
-          <td>928<div class="bar" style="width:200px"></div></td>
+          <td>Z=1 N=0 V=0</td>
+          <td>991<div class="bar" style="width:200px"></div></td>
         </tr>
         <tr>
           <td>74</td>
           <td>11</td>
           <td>STORE 0</td>
           <td>0 &rarr; 0</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=1 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>75</td>
           <td>12</td>
           <td>JNZ 6</td>
           <td>0 &rarr; 0</td>
-          <td>353<div class="bar" style="width:76px"></div></td>
+          <td>Z=1 N=0 V=0</td>
+          <td>353<div class="bar" style="width:71px"></div></td>
         </tr>
         <tr>
           <td>76</td>
           <td>13</td>
           <td>LOAD 1</td>
           <td>0 &rarr; 55</td>
-          <td>304<div class="bar" style="width:65px"></div></td>
+          <td>Z=1 N=0 V=0</td>
+          <td>304<div class="bar" style="width:61px"></div></td>
         </tr>
         <tr>
           <td>77</td>
           <td>14</td>
           <td>HALT 0</td>
           <td>55 &rarr; 55</td>
+          <td>Z=1 N=0 V=0</td>
           <td>0<div class="bar" style="width:0px"></div></td>
         </tr>
 </table>

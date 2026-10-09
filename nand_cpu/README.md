@@ -38,14 +38,33 @@ trace and the gate-cost bar chart.
 | 1 | LOADI n | ACC = n |
 | 2 | LOAD addr | ACC = RAM[addr] |
 | 3 | STORE addr | RAM[addr] = ACC |
-| 4 | ADD addr | ACC += RAM[addr] |
-| 5 | SUB addr | ACC -= RAM[addr] |
+| 4 | ADD addr | ACC += RAM[addr]; sets Z/N/V |
+| 5 | SUB addr | ACC -= RAM[addr]; sets Z/N/V |
 | 6 | JUMP addr | PC = addr |
 | 7 | JZ addr | if ACC == 0: PC = addr |
 | 8 | JNZ addr | if ACC != 0: PC = addr |
 | 9 | HALT | stop |
+| 10 | JLT addr | if N XOR V (signed less-than from the last ADD/SUB/CMP; after `CMP addr` this means ACC < RAM[addr]): PC = addr |
+| 11 | JOV addr | if V (signed overflow from the last ADD/SUB/CMP): PC = addr |
+| 12 | CMP addr | ACC - RAM[addr], sets Z/N/V only — ACC is left unchanged |
 
 Each instruction is packed into 16 bits: `[4-bit opcode][12-bit operand]`.
+
+### Status flags
+
+ADD, SUB, and CMP update a 3-bit status register, built entirely from the
+same NAND-derived gates as everything else:
+
+- **Z** (zero) — `is_zero16(result)`
+- **N** (negative) — the result's sign bit (bit 15), tapped directly
+- **V** (signed overflow) — two's-complement overflow:
+  - ADD: `V = (a15 == b15) AND (sum15 != a15)`
+  - SUB: `V = (a15 != b15) AND (diff15 != a15)`
+
+`JLT` (signed less-than, `N XOR V`) and `JOV` (overflow) branch on that
+register, so comparisons and division loops run as real hardware-style
+conditional branches instead of precomputed constants. `CMP` is just `SUB`
+with the ACC write suppressed — the classic "compare" trick.
 
 ## What "novel" means here
 
@@ -62,4 +81,6 @@ course sequence. What's original in this project:
 Running `demo.py` assembles and executes a small program that sums the
 numbers 1 through 10 using a counting loop — no manual input after
 `cpu.run()` is called. Expected output: `55`, in 78 clock cycles, using
-~30,000 NAND gates total (all bottom-up, traceable to `Nand()`).
+31,712 NAND gates total (all bottom-up, traceable to `Nand()`; this rose
+from the project's original ~30,000 once ADD/SUB started computing the
+Z/N/V status flags on every cycle, not just the result).

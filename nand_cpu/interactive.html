@@ -536,11 +536,16 @@
         <tr><td class="op">JZ a</td><td class="desc">if ACC == 0: PC = a</td></tr>
         <tr><td class="op">JNZ a</td><td class="desc">if ACC != 0: PC = a</td></tr>
         <tr><td class="op">HALT</td><td class="desc">stop execution</td></tr>
+        <tr><td class="op">JLT a</td><td class="desc">signed &lt; (N XOR V); after CMP a: if ACC &lt; RAM[a]: PC = a</td></tr>
+        <tr><td class="op">JOV a</td><td class="desc">if V (signed overflow): PC = a</td></tr>
+        <tr><td class="op">CMP a</td><td class="desc">ACC - RAM[a], flags only (ACC unchanged)</td></tr>
       </table>
       <p class="hint-text">
         16-bit instruction: <code class="inline">[opcode:4][operand:12]</code>.
         Accumulator machine — one working register (ACC), everything else lives in RAM.
         <code class="inline">label:</code> lines define jump targets; <code class="inline">;</code> starts a comment.
+        ADD/SUB/CMP set the status flags <code class="inline">Z</code> (zero),
+        <code class="inline">N</code> (sign bit), <code class="inline">V</code> (signed overflow) — all built from NAND-derived gates.
       </p>
     </div>
 
@@ -577,6 +582,8 @@
 
     <div class="section-divider">Results</div>
 
+    <div class="nl-message" id="overflowWarning">Overflow: result wrapped (16-bit signed)</div>
+
     <div class="summary panel" id="summary">
       <div class="stat"><b id="statResult">-</b><span>Result (ACC)</span></div>
       <div class="stat"><b id="statCycles">-</b><span>Cycles executed</span></div>
@@ -589,7 +596,7 @@
       <div class="trace-scroll">
         <table class="trace">
           <thead>
-            <tr><th>Cycle</th><th>PC</th><th>Instruction</th><th>ACC</th><th>Gates used this cycle</th></tr>
+            <tr><th>Cycle</th><th>PC</th><th>Instruction</th><th>ACC</th><th>Flags</th><th>Gates used this cycle</th></tr>
           </thead>
           <tbody id="traceBody"></tbody>
         </table>
@@ -679,6 +686,34 @@ function isZero16(a) {
   return Not(anyOne);
 }
 
+function add16Flags(a, b) {
+  // a + b -> {result, z, n, v}. Z/N/V are hardware-style status flags
+  // built alongside the sum, purely from gates:
+  //   Z = isZero16(result)
+  //   N = result's sign bit (bit 15) — a direct tap, no gate needed
+  //   V = (a15 == b15) AND (sum15 != a15) — two same-signed operands
+  //       whose result flipped sign is the two's-complement overflow case.
+  const result = add16(a, b);
+  const z = isZero16(result);
+  const n = result[15];
+  const sameSign = Not(Xor(a[15], b[15]));
+  const signFlipped = Xor(result[15], a[15]);
+  const v = And(sameSign, signFlipped);
+  return { result, z, n, v };
+}
+
+function sub16Flags(a, b) {
+  // a - b -> {result, z, n, v}. Overflow for subtraction is:
+  //   V = (a15 != b15) AND (diff15 != a15)
+  const result = sub16(a, b);
+  const z = isZero16(result);
+  const n = result[15];
+  const diffSign = Xor(a[15], b[15]);
+  const signFlipped = Xor(result[15], a[15]);
+  const v = And(diffSign, signFlipped);
+  return { result, z, n, v };
+}
+
 /* ======================================================================
  * memory.js — Layer 3: Sequential Logic (memory)
  * ==================================================================== */
@@ -718,6 +753,7 @@ class ProgramCounter {
 const OPCODES = {
   NOP: 0, LOADI: 1, LOAD: 2, STORE: 3, ADD: 4,
   SUB: 5, JUMP: 6, JZ: 7, JNZ: 8, HALT: 9,
+  JLT: 10, JOV: 11, CMP: 12,
 };
 const MNEMONICS = Object.fromEntries(Object.entries(OPCODES).map(([k, v]) => [v, k]));
 
@@ -779,6 +815,9 @@ class CPU {
     this.halted = false;
     this.cycle = 0;
     this.log = [];
+    // Status register: set only by ADD/SUB/CMP, like a real ALU flags
+    // register. Z = zero, N = sign bit, V = signed (two's-complement) overflow.
+    this.flags = { z: 0, n: 0, v: 0 };
   }
 
   step() {
@@ -806,12 +845,18 @@ class CPU {
       case 3: // STORE
         this.ram.write(operand, 1, this.acc.bits);
         break;
-      case 4: // ADD
-        this.acc.tick(1, add16(this.acc.bits, this.ram.read(operand)));
+      case 4: { // ADD — writes ACC and sets Z/N/V
+        const f = add16Flags(this.acc.bits, this.ram.read(operand));
+        this.acc.tick(1, f.result);
+        this.flags = { z: f.z, n: f.n, v: f.v };
         break;
-      case 5: // SUB
-        this.acc.tick(1, sub16(this.acc.bits, this.ram.read(operand)));
+      }
+      case 5: { // SUB — writes ACC and sets Z/N/V
+        const f = sub16Flags(this.acc.bits, this.ram.read(operand));
+        this.acc.tick(1, f.result);
+        this.flags = { z: f.z, n: f.n, v: f.v };
         break;
+      }
       case 6: // JUMP
         jumped = true; jumpTarget = operand;
         break;
@@ -824,6 +869,18 @@ class CPU {
       case 9: // HALT
         this.halted = true;
         break;
+      case 10: // JLT: signed less-than (N XOR V) from the last ADD/SUB/CMP;
+                // after CMP addr this means ACC < RAM[addr]
+        if (Xor(this.flags.n, this.flags.v)) { jumped = true; jumpTarget = operand; }
+        break;
+      case 11: // JOV: signed overflow set by the last ADD/SUB/CMP
+        if (this.flags.v) { jumped = true; jumpTarget = operand; }
+        break;
+      case 12: { // CMP — same as SUB but ACC is left unchanged
+        const f = sub16Flags(this.acc.bits, this.ram.read(operand));
+        this.flags = { z: f.z, n: f.n, v: f.v };
+        break;
+      }
       default:
         throw new Error(`Unknown opcode ${opcode} at PC=${pcVal}`);
     }
@@ -840,6 +897,7 @@ class CPU {
     this.log.push({
       cycle: this.cycle, pc: pcVal, mnemonic, operand,
       accBefore, accAfter, gatesUsed,
+      z: this.flags.z, n: this.flags.n, v: this.flags.v,
     });
 
     this.cycle += 1;
@@ -925,6 +983,7 @@ const errorBox = document.getElementById('errorBox');
 const summaryEl = document.getElementById('summary');
 const traceWrap = document.getElementById('traceWrap');
 const traceBody = document.getElementById('traceBody');
+const overflowWarning = document.getElementById('overflowWarning');
 
 sourceEl.value = EXAMPLES.sum;
 
@@ -945,6 +1004,8 @@ function runProgram() {
   hideNlMessage();
   summaryEl.style.display = 'none';
   traceWrap.style.display = 'none';
+  overflowWarning.style.display = 'none';
+  overflowWarning.className = 'nl-message';
 
   const lines = sourceEl.value.split('\n');
   let program, cpu, result;
@@ -984,6 +1045,13 @@ function renderResults(cpu, result) {
   document.getElementById('statAvg').textContent = (totalGates / Math.max(cycles, 1)).toFixed(1);
   summaryEl.style.display = 'flex';
 
+  // Overflow is a transient ALU event (the status register is only
+  // guaranteed to reflect the *last* ADD/SUB/CMP), so flag it if V was
+  // ever set at any point during execution, not just at halt.
+  const overflowed = trace.some(t => t.v === 1);
+  overflowWarning.className = 'nl-message' + (overflowed ? ' warn' : '');
+  overflowWarning.style.display = overflowed ? 'block' : 'none';
+
   const rows = trace.map(t => {
     const barWidth = Math.round((t.gatesUsed / maxGates) * 200);
     const halted = t.mnemonic === 'HALT';
@@ -992,6 +1060,7 @@ function renderResults(cpu, result) {
       <td>${t.pc}</td>
       <td>${t.mnemonic} ${t.operand}</td>
       <td>${t.accBefore} &rarr; ${t.accAfter}</td>
+      <td>Z=${t.z} N=${t.n} V=${t.v}</td>
       <td>${t.gatesUsed}<div class="bar" style="width:${barWidth}px"></div></td>
     </tr>`;
   });
@@ -1203,46 +1272,18 @@ function genDivide(a, b) {
     throw new Error(`Cannot divide ${a} by 0.`);
   }
 
-  const quotient = Math.floor(a / b);
-  const remainder = a - quotient * b;
-
-  // Quotient is 0 (divisor bigger than dividend) -> nothing to subtract,
-  // no loop needed. This is also what keeps a bad "B > A" input from
-  // ever looping.
-  if (quotient === 0) {
-    const source =
-`; NL: divide ${a} by ${b} (via repeated subtraction)
-; ${b} is bigger than ${a}, so it doesn't go in even once
-; RAM[0]=remainder, RAM[1]=divisor, RAM[2]=quotient
-
-LOADI ${a}
-STORE 0
-LOADI ${b}
-STORE 1
-LOADI 0
-STORE 2
-LOAD 2
-HALT`;
-    return {
-      source,
-      describe: (result, cpu) =>
-        `${a} / ${b} = ${bitsToInt(cpu.ram.read(2))} remainder ${bitsToInt(cpu.ram.read(0))}`,
-    };
-  }
-
-  // The ISA only exposes zero-checks (JZ/JNZ), not a "less than" test, so
-  // there's no safe way for the CPU to discover at runtime exactly when the
-  // remainder drops below the divisor without risking underflow/an infinite
-  // loop. Since the divisor and dividend are known constants here, the trip
-  // count (the quotient) is computed once up front, and the loop below runs
-  // for exactly that many iterations — each iteration doing a real SUB on
-  // the CPU and counting itself via ADD, so the subtraction genuinely
-  // happens on the NAND-built hardware, just with a precomputed, safe
-  // iteration bound instead of a runtime less-than check.
+  // A real runtime loop — no precomputed quotient. CMP compares the
+  // remainder to the divisor (ACC is left unchanged), and JLT's hardware
+  // signed-less-than test (N XOR V from that CMP) decides whether to keep
+  // going: while remainder >= divisor { remainder -= divisor; quotient++ }.
+  // The loop is still bounded — the remainder strictly decreases by at
+  // least `divisor` (>=1) each iteration, so it provably reaches "< divisor"
+  // in at most `a` iterations, and the CPU's own cycle cap (below) is the
+  // backstop in case that reasoning is ever wrong.
   const source =
-`; NL: divide ${a} by ${b} (via repeated subtraction)
-; RAM[0]=remainder (starts at ${a}), RAM[1]=divisor (${b}), RAM[2]=quotient
-; RAM[3]=constant 1, RAM[4]=loop counter (${quotient} -> 0)
+`; NL: divide ${a} by ${b} (real loop: while remainder >= divisor, subtract)
+; RAM[0]=remainder (starts at ${a}), RAM[1]=divisor (${b})
+; RAM[2]=quotient, RAM[3]=constant 1
 
 LOADI ${a}
 STORE 0
@@ -1252,19 +1293,17 @@ LOADI 0
 STORE 2
 LOADI 1
 STORE 3
-LOADI ${quotient}
-STORE 4
 LOOP:
 LOAD 0
+CMP 1
+JLT END
 SUB 1
 STORE 0
 LOAD 2
 ADD 3
 STORE 2
-LOAD 4
-SUB 3
-STORE 4
-JNZ LOOP
+JUMP LOOP
+END:
 LOAD 2
 HALT`;
   return {

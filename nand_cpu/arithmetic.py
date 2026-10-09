@@ -63,3 +63,34 @@ def is_zero16(a):
     for bit in a:
         any_one = Or(any_one, bit)
     return Not(any_one)
+
+
+def add16_flags(a, b):
+    """a + b -> (result, z, n, v), the hardware-style status flags built
+    alongside the sum, purely from gates:
+      Z = is_zero16(result)
+      N = result's sign bit (bit 15) — a direct tap, no gate needed
+      V = (a15 == b15) AND (sum15 != a15) — two same-signed operands whose
+          result flipped sign is exactly the two's-complement overflow case.
+    """
+    result = add16(a, b)
+    z = is_zero16(result)
+    n = result[15]
+    same_sign = Not(Xor(a[15], b[15]))
+    sign_flipped = Xor(result[15], a[15])
+    v = And(same_sign, sign_flipped)
+    return result, z, n, v
+
+
+def sub16_flags(a, b):
+    """a - b -> (result, z, n, v). Same shape as add16_flags; overflow for
+    subtraction is: V = (a15 != b15) AND (diff15 != a15) — operands of
+    different sign whose result flipped away from the minuend's sign.
+    """
+    result = sub16(a, b)
+    z = is_zero16(result)
+    n = result[15]
+    diff_sign = Xor(a[15], b[15])
+    sign_flipped = Xor(result[15], a[15])
+    v = And(diff_sign, sign_flipped)
+    return result, z, n, v
