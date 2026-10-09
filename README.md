@@ -40,7 +40,7 @@ both.
 
 ```powershell
 cd nand_cpu
-python test_gates.py        # gates, arithmetic, CPU, ISA, flags — 58 checks
+python test_gates.py        # gates, arithmetic, CPU, ISA, flags, cost table — 62 checks
 python test_registers.py    # SR latch, D latch, DFF, GateRegister, RAM8 — 2426 checks
 node test_registers.js      # same register hierarchy, against the real index.html script
 python demo.py               # runs "sum 1..10", writes trace_report.html
@@ -95,15 +95,26 @@ CPU's 256-word program/data RAM uses this; gate-building all 256 words would cos
 millions of simulated NAND gates per cycle for no behavioural difference.
 
 `registers.py` builds memory the way real hardware does, bottom-up, from nothing but
-`Nand()`: a cross-coupled NAND pair (**SR latch**) → a **gated D latch** (adds an
-enable, so set/reset can never both be asserted) → a **master-slave D flip-flop**
-(captures only on the clock edge) → a 1-bit **`Bit`** cell with a load input → a
-16-bit **`GateRegister`** → **`RAM8`**, an 8-word RAM built from 8 `GateRegister`s
-behind a 3-bit DMux/Mux address decoder. The CPU's ACC, program counter, and
-instruction register (IR) are real `GateRegister`s — **`RAM8` is the gate-built proof**
-that the construction matches the behavioural model exactly (checked against it on
-hundreds of random reads/writes in `test_registers.py`/`.js`), not something wired
-into the CPU itself.
+`Nand()`:
+
+- **SR latch** — the textbook 2-gate active-LOW circuit, taken directly:
+  `q = NAND(s_bar, qn)`, `qn = NAND(r_bar, q)`. No input inversion — callers that
+  need active-low signals (like the D latch below) build them from ordinary NANDs.
+- **Gated D latch** — the textbook 4-NAND circuit, taken directly: `a = NAND(d, en)`,
+  `b = NAND(a, en)`, then `q = NAND(a, qn)`, `qn = NAND(b, q)` — the last two *are*
+  the SR latch core above, fed `s_bar=a, r_bar=b`.
+- **Master-slave D flip-flop** — two gated D latches (a master, transparent while the
+  clock is low; a slave, transparent while it's high) plus one inverter deriving the
+  master's enable from the clock. Captures only on the clock edge, not for however
+  long D happens to be high.
+- A 1-bit **`Bit`** cell with a load input, a 16-bit **`GateRegister`** built from 16
+  `Bit`s, and **`RAM8`**, an 8-word RAM built from 8 `GateRegister`s behind a 3-bit
+  DMux/Mux address decoder.
+
+The CPU's ACC, program counter, and instruction register (IR) are real
+`GateRegister`s — **`RAM8` is the gate-built proof** that the construction matches
+the behavioural model exactly (checked against it on hundreds of random reads/writes
+in `test_registers.py`/`.js`), not something wired into the CPU itself.
 
 A feedback loop (the SR latch's cross-coupled pair) has no single-pass evaluation
 order in software — finding where it settles means re-evaluating the same two gates
@@ -111,51 +122,62 @@ until the values stop changing. That's a software artifact, not a hardware one: 
 latches are still just N physical gates firing once per clock phase. So the settle
 loop uses an uncounted NAND, and `gates.count_physical(n)` attributes the real gate
 count exactly once per call, independent of how many iterations settling took
-(documented in `gates.py` and mirrored in `index.html`).
+(documented in `gates.py` and mirrored in `index.html`). The same rule applies to the
+flip-flop's master latch: the clock transitioning closes it, but that's not a second
+physical evaluation of the same 4 gates, so `phase_high()` doesn't re-run it — a
+master-slave DFF spends exactly 2 latches + 1 inverter per tick, not 2 latches plus
+one evaluated twice.
 
 ## Measured gate costs
 
-Every number below came out of a real run (`python test_gates.py`, `test_registers.py`,
-and the per-instruction script in this repo's history) — none are hand-derived.
+Every number below came out of a real run — `test_gates.py`'s
+`measure_instruction_costs()` probes each instruction independently, and
+`test_per_instruction_cost_table_matches_real_programs()` checks that table against
+the four programs below's own traces, instruction by instruction. None are
+hand-derived or estimated.
 
 **Per instruction** (fixed per opcode — this simulation has no short-circuiting, so
 every instruction costs exactly the same gates every time regardless of operand
-values; only branches have a taken/not-taken split):
+values; only branches have a taken/not-taken split, and "taken" always includes the
+instruction-register load and the PC write, i.e. fetch (272) + a load-path PC write
+(272) is baked into every taken cost below):
 
 | Instruction | Gates | Why |
 |---|---|---|
-| NOP / STORE | 1,424 | fetch (IR load, 560) + PC increment (16-bit add16, 304 + GateRegister write, 560) |
-| LOADI / LOAD | 1,984 | 1,424 + ACC write (560) |
-| ADD | 2,352 | 1,424 + ACC write (560) + ALU: add16 (304) + Z/V flags (64) |
-| SUB | 2,671 | 1,424 + ACC write (560) + ALU: negate+add (624) + Z/V flags (63) |
-| CMP | 2,111 | 1,424 + ALU: negate+add (624) + Z/V flags (63) — **no** ACC write |
-| JUMP | 1,120 | fetch (560) + PC load, no increment (560) — always, no condition logic |
-| JLT | 6 (taken) / 1,430 (not taken) | the N XOR V gate (6) always fires; the 304-gate PC increment only fires when not taken |
-| JZ / JNZ | 49 (taken) / 1,473 (not taken) | `is_zero16` (49) always fires |
-| JOV | 0 (taken) / 1,424 (not taken) | reading V is a direct tap |
-| HALT | 560 | fetch only — no PC tick, no ACC write |
+| NOP / STORE | 848 | fetch (IR load, 272) + PC increment (16-bit add16, 304 + GateRegister write, 272) |
+| LOADI / LOAD | 1,120 | 848 + ACC write (272) |
+| ADD | 1,488 | 848 + ACC write (272) + ALU: add16 (304) + Z/V flags (64) |
+| SUB | 1,807 | 848 + ACC write (272) + ALU: negate+add (624) + Z/V flags (63) |
+| CMP | 1,535 | 848 + ALU: negate+add (624) + Z/V flags (63) — **no** ACC write |
+| JUMP | 544 | fetch (272) + PC load, no increment (272) — always, no condition logic |
+| JLT | 550 (taken) / 854 (not taken) | the N XOR V gate (6) always fires; the 304-gate PC increment only fires when not taken |
+| JZ / JNZ | 593 (taken) / 897 (not taken) | `is_zero16` (49) always fires |
+| JOV | 544 (taken) / 848 (not taken) | reading V is a direct tap |
+| HALT | 272 | fetch only — no PC tick, no ACC write |
 
 **Registers** (`registers.py`/`test_registers.py`):
 
 | Component | Gates |
 |---|---|
-| 1 SR latch call | 4 |
-| 1 master-slave DFF tick | 27 |
-| 1 16-bit GateRegister tick | 560 |
-| 1 RAM8 write | 4,531 |
+| 1 SR latch call | 2 |
+| 1 gated D latch call | 4 |
+| 1 master-slave DFF tick | 9 |
+| 1 Bit (1-bit cell) tick | 17 |
+| 1 16-bit GateRegister tick | 272 |
+| 1 RAM8 write | 2,227 |
 | 1 RAM8 read | 1,059 |
 
 **Demo totals** (Python == JS, exactly, on every run):
 
 | Program | Result | Cycles | Gates |
 |---|---|---|---|
-| Sum 1..10 | 55 | 78 | 143,152 |
-| Sum 1..300 (wraps, V flagged) | -20386 | 3,010 | 5,646,880 |
-| 20 / 3 | 6 remainder 2 | 67 | 120,397 |
-| 5 / 9 | 0 remainder 5 | 13 | 21,397 |
+| Sum 1..10 | 55 | 78 | 85,840 |
+| Sum 1..300 (wraps, V flagged) | -20386 | 3,010 | 3,393,568 |
+| 20 / 3 | 6 remainder 2 | 67 | 73,453 |
+| 5 / 9 | 0 remainder 5 | 13 | 12,469 |
 
-Sum 1..300 runs in well under a second in Node (consistently under 50ms) — the
-gate-built registers don't make the simulation noticeably slower.
+Sum 1..300 runs in well under a second in Node (14–49ms measured) — the gate-built
+registers don't make the simulation noticeably slower.
 
 ## The Signal Path panel
 
@@ -183,8 +205,8 @@ overflow edge case — what running the same ADD on the actual CPU reports.
   the page's amber warning exist specifically to surface that instead of masking it.
 - **This simulation has no gate propagation delay.** Feedback circuits (the SR latch)
   are settled by iterating to a fixed point rather than a physical race, which is why
-  the documented forbidden input (`S=R=1`) resolves deterministically here instead of
-  being genuinely undefined.
+  the documented forbidden input (`s_bar = r_bar = 0`, active-low) resolves
+  deterministically here instead of being genuinely undefined.
 
 ## What's original here
 
