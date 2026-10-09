@@ -1,12 +1,13 @@
 "use strict";
 /*
  * test_registers.js — sanity checks for the NAND-built memory hierarchy
- * in interactive.html's JS port: SR latch -> gated D latch -> master-
- * slave DFF -> Bit -> GateRegister -> RAM8.
+ * in index.html's JS port: SR latch -> gated D latch -> master-slave
+ * DFF -> Bit -> GateRegister -> RAM8.
  *
  * This does NOT maintain a second copy of the logic: it extracts the
- * real <script> block out of interactive.html and runs it in a sandboxed
- * VM context (with a minimal DOM stub so the page's top-level
+ * real <script> block out of index.html (the repo's GitHub Pages entry
+ * point — see ../index.html) and runs it in a sandboxed VM context
+ * (with a minimal DOM stub so the page's top-level
  * `document.getElementById(...)` calls don't throw), so these tests
  * exercise the exact code the browser would run.
  *
@@ -18,7 +19,7 @@ const path = require("path");
 const vm = require("vm");
 
 function loadPageScript() {
-  const html = fs.readFileSync(path.join(__dirname, "interactive.html"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   const m = html.match(/<script>\r?\n([\s\S]*?)\r?\n<\/script>/);
   if (!m) throw new Error("could not find <script> block in interactive.html");
   const js = m[1];
