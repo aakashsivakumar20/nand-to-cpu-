@@ -19,7 +19,7 @@ const vm = require("vm");
 
 function loadPageScript() {
   const html = fs.readFileSync(path.join(__dirname, "interactive.html"), "utf8");
-  const m = html.match(/<script>\n([\s\S]*?)\n<\/script>/);
+  const m = html.match(/<script>\r?\n([\s\S]*?)\r?\n<\/script>/);
   if (!m) throw new Error("could not find <script> block in interactive.html");
   const js = m[1];
 
