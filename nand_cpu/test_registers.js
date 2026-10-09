@@ -74,22 +74,23 @@ function check(label, actual, expected) {
   if (ok) passCount++; else failCount++;
 }
 
-// ---- SR latch: set / reset / hold ----
+// ---- SR latch: set / reset / hold (active-LOW inputs: sBar=0 sets,
+// rBar=0 resets, 1,1 holds) ----
 {
   let [q, qn] = [0, 1];
-  [q, qn] = page.srLatch(1, 0, q, qn);
-  check("SR latch set -> [q,qn]", [q, qn], [1, 0]);
-  [q, qn] = page.srLatch(0, 0, q, qn);
-  check("SR latch hold after set -> [q,qn]", [q, qn], [1, 0]);
   [q, qn] = page.srLatch(0, 1, q, qn);
+  check("SR latch set -> [q,qn]", [q, qn], [1, 0]);
+  [q, qn] = page.srLatch(1, 1, q, qn);
+  check("SR latch hold after set -> [q,qn]", [q, qn], [1, 0]);
+  [q, qn] = page.srLatch(1, 0, q, qn);
   check("SR latch reset -> [q,qn]", [q, qn], [0, 1]);
-  [q, qn] = page.srLatch(0, 0, q, qn);
+  [q, qn] = page.srLatch(1, 1, q, qn);
   check("SR latch hold after reset -> [q,qn]", [q, qn], [0, 1]);
 }
 
-// ---- SR latch: documented forbidden input ----
+// ---- SR latch: documented forbidden input (sBar=rBar=0) ----
 {
-  const [q, qn] = page.srLatch(1, 1, 0, 1);
+  const [q, qn] = page.srLatch(0, 0, 0, 1);
   check("SR latch forbidden input -> [q,qn]", [q, qn], [1, 1]);
 }
 
@@ -177,7 +178,7 @@ function check(label, actual, expected) {
     const result = cpu.run(20000);
     return { result, cycles: cpu.cycle, gates: page.getGateCount(), halted: cpu.halted };
   }
-  check("JS sum 1..10 still correct", runSource(page.EXAMPLES.sum), { result: 55, cycles: 78, gates: 143152, halted: true });
+  check("JS sum 1..10 still correct", runSource(page.EXAMPLES.sum), { result: 55, cycles: 78, gates: 85840, halted: true });
   check("JS 20/3 still correct", runSource(page.genDivide(20, 3).source).result, 6);
   check("JS 5/9 still correct", runSource(page.genDivide(5, 9).source).result, 0);
 }

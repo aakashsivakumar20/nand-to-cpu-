@@ -858,8 +858,8 @@ function sub16Flags(a, b) {
  * registers.js — Layer 3b: memory built from NAND gates, not modelled.
  * memory.js's Register/RAM below are a BEHAVIOURAL model. This section
  * instead builds memory the way real hardware does, bottom-up:
- *   cross-coupled NAND pair (SR latch)
- *     -> gated D latch (enable, so S/R can never both be asserted)
+ *   cross-coupled NAND pair (SR latch) — textbook 2-gate active-LOW circuit
+ *     -> gated D latch — textbook 4-NAND circuit directly
  *       -> master-slave D flip-flop (captures only on the clock edge)
  *         -> Bit (1-bit cell with a load input)
  *           -> GateRegister (16 Bits sharing one load line)
@@ -867,18 +867,17 @@ function sub16Flags(a, b) {
  * See countPhysical's comment above for the gate-counting rule this
  * relies on.
  * ==================================================================== */
-const SR_LATCH_GATES = 2; // the two cross-coupled NANDs themselves
+const SR_LATCH_GATES = 2; // the two cross-coupled NANDs — nothing else
 
-function srLatch(s, r, prevQ, prevQn, maxIters = 16) {
-  // Cross-coupled NAND SR latch. s/r active-HIGH: set=1 -> q=1, reset=1
-  // -> q=0, s=r=0 holds. FORBIDDEN INPUT: s=1 and r=1 together drives
-  // both core gates toward output 1 (via their inverted input going to
-  // 0), breaking the Q/Qn complementary invariant; a real latch's
-  // resolution on release is a propagation-delay race (undefined) —
-  // this zero-delay sim settles deterministically at q=qn=1 instead.
-  const sBar = Not(s);  // counted normally
-  const rBar = Not(r);  // counted normally
-
+function srLatch(sBar, rBar, prevQ, prevQn, maxIters = 16) {
+  // Cross-coupled NAND SR latch, ACTIVE-LOW inputs — the textbook 2-gate
+  // circuit taken directly, no input inversion: q=NAND(sBar,qn),
+  // qn=NAND(rBar,q). sBar=0 sets (q=1), rBar=0 resets (q=0), 1,1 holds.
+  // FORBIDDEN INPUT: sBar=rBar=0 together drives both core gates toward
+  // output 1 (via their own 0 input), breaking the Q/Qn complementary
+  // invariant; a real latch's resolution on release is a
+  // propagation-delay race (undefined) — this zero-delay sim settles
+  // deterministically at q=qn=1 instead.
   let q = prevQ, qn = prevQn;
   let settled = false;
   for (let i = 0; i < maxIters; i++) {
@@ -889,40 +888,67 @@ function srLatch(s, r, prevQ, prevQn, maxIters = 16) {
   }
   if (!settled) throw new Error(`SR latch did not settle within ${maxIters} iterations`);
 
+  // The ENTIRE physical circuit is these 2 gates — counted once per
+  // call regardless of settle iterations, independent of how many a
+  // caller's input-forming gates (if any) cost separately.
   countPhysical(SR_LATCH_GATES);
   return [q, qn];
 }
 
 function dLatch(d, en, prevQ, prevQn) {
-  // Transparent while en=1; holds while en=0. s=AND(d,en), r=AND(NOT(d),en)
-  // can never both be 1, so the SR latch's forbidden input is unreachable.
-  const notD = Not(d);
-  const s = And(d, en);
-  const r = And(notD, en);
-  return srLatch(s, r, prevQ, prevQn);
+  // Transparent while en=1 (q follows d); holds while en=0. The
+  // textbook 4-NAND gated D latch, taken directly:
+  //   a = NAND(d,en); b = NAND(a,en); q = NAND(a,qn); qn = NAND(b,q)
+  // The last two ARE the active-low SR latch core above, fed sBar=a,
+  // rBar=b — a and b can never both be 0 (en=0 forces both to 1; en=1
+  // makes exactly one of them 0, depending on d), so the SR latch's
+  // forbidden input is structurally unreachable here. a/b depend only
+  // on d/en (not on the feedback), so they're ordinary counted NANDs
+  // computed once, outside the settle loop.
+  const a = Nand(d, en);   // counted normally
+  const b = Nand(a, en);   // counted normally
+  return srLatch(a, b, prevQ, prevQn);
 }
 
 class DFF {
-  // Edge-triggered 1-bit flip-flop: a master (enabled while clk=0,
-  // transparent to D) feeding a slave (enabled while clk=1, transparent
-  // to the master's held value). One tick() runs clk 0->1 once.
+  // Edge-triggered 1-bit flip-flop: a master latch (enabled while
+  // clk=0, transparent to D) feeding a slave latch (enabled while
+  // clk=1, transparent to the master's held value). One tick() runs
+  // clk 0->1 once.
+  //
+  // GATE COUNTING: a master-slave DFF is physically two latches plus
+  // one inverter deriving the master's enable from the clock —
+  // 2*4 + 1 = 9 gates, counted exactly once per tick(). The inverter
+  // fires in phaseLow (NOT(0) -> masterEn=1, opening the master to
+  // sample d). phaseHigh does NOT re-run the master's gates a second
+  // time: by clk=1 the master's enable would be NOT(1)=0 (closed), and
+  // a closed latch holding its value isn't a second physical
+  // evaluation of it — re-calling dLatch for it here would double-count
+  // the same 4 gates. The slave's enable is the clock signal directly
+  // (no inverter needed), so phaseHigh spends exactly one dLatch call
+  // on the slave and nothing more.
   constructor() {
     // (q=0,qn=1) is the self-consistent power-up state; (0,0) is NOT a
-    // valid SR rest state — under hold it's a zero-delay oscillator.
+    // valid SR rest state (sBar=rBar=1, hold) — it's a zero-delay
+    // oscillator that never settles.
     this.masterQ = 0; this.masterQn = 1;
     this.slaveQ = 0; this.slaveQn = 1;
   }
   get q() { return this.slaveQ; }
   phaseLow(d) {
-    // clk=0: master transparent, samples d; slave holds — Q unaffected.
-    [this.masterQ, this.masterQn] = dLatch(d, 1, this.masterQ, this.masterQn);
+    // clk=0: the DFF's one clock inverter fires here (NOT(0)=1),
+    // opening the master, which then samples d. The slave's enable is
+    // clk=0 directly (closed), so it isn't touched — Q is unaffected,
+    // proving D alone (without a clock edge) can't move Q.
+    const masterEn = Not(0);   // the ONE inverter this DFF spends per tick
+    [this.masterQ, this.masterQn] = dLatch(d, masterEn, this.masterQ, this.masterQn);
     return this.slaveQ;
   }
   phaseHigh() {
-    // clk=1: master now holds (its enable=NOT(clk)=0); slave transparent,
-    // Q takes on the master's held value — the clock edge completing.
+    // clk=1: the slave's enable is clk=1 directly (open) — it captures
+    // whatever the master is currently holding. The master itself is
+    // not re-evaluated here (see the class comment above).
     [this.slaveQ, this.slaveQn] = dLatch(this.masterQ, 1, this.slaveQ, this.slaveQn);
-    [this.masterQ, this.masterQn] = dLatch(this.masterQ, 0, this.masterQ, this.masterQn);
     return this.slaveQ;
   }
   tick(d) {
