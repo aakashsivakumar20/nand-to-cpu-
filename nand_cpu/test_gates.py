@@ -261,6 +261,128 @@ def test_sum_overflow_flag():
     check("sum 1..300 overflow flag raised", overflowed, True)
 
 
+# ---- per-instruction gate-cost table, measured independently of any
+# real program, then checked against the real programs' own traces ----
+
+# Mnemonics that branch — everything else has exactly one cost; these
+# have a taken/not-taken split (except JUMP, which is unconditional and
+# so only ever has the one "taken" cost).
+BRANCH_MNEMONICS = {'JUMP', 'JZ', 'JNZ', 'JLT', 'JOV'}
+
+
+def measure_instruction_costs():
+    """Runs small, dedicated probe programs — none of which share this
+    file's demo programs — and returns {(mnemonic, taken_or_None): gates}.
+    taken_or_None is None for every non-branching mnemonic and for JUMP
+    (unconditional, so it only has one cost), else True/False."""
+
+    def first_cost(src, mnemonic):
+        cpu = CPU(assemble(src.strip().split('\n')))
+        cpu.run()
+        for row in cpu.log:
+            if row['mnemonic'] == mnemonic:
+                return row['gates_used']
+        raise AssertionError(f"{mnemonic} never executed in probe")
+
+    def last_cost(src):
+        cpu = CPU(assemble(src.strip().split('\n')))
+        cpu.run()
+        return cpu.log[-2]['gates_used']  # the instruction right before HALT
+
+    costs = {}
+    costs[('NOP', None)] = first_cost("NOP\nHALT", 'NOP')
+    costs[('LOADI', None)] = first_cost("LOADI 5\nHALT", 'LOADI')
+    costs[('LOAD', None)] = first_cost("LOADI 5\nSTORE 50\nLOAD 50\nHALT", 'LOAD')
+    costs[('STORE', None)] = first_cost("LOADI 5\nSTORE 50\nHALT", 'STORE')
+    costs[('ADD', None)] = first_cost(
+        "LOADI 5\nSTORE 50\nLOADI 3\nSTORE 51\nLOAD 50\nADD 51\nHALT", 'ADD')
+    costs[('SUB', None)] = first_cost(
+        "LOADI 5\nSTORE 50\nLOADI 3\nSTORE 51\nLOAD 50\nSUB 51\nHALT", 'SUB')
+    costs[('CMP', None)] = first_cost(
+        "LOADI 5\nSTORE 50\nLOADI 3\nSTORE 51\nLOAD 50\nCMP 51\nHALT", 'CMP')
+    halt_cpu = CPU(assemble(['NOP', 'HALT']))
+    halt_cpu.run()
+    costs[('HALT', None)] = halt_cpu.log[1]['gates_used']
+
+    costs[('JUMP', None)] = last_cost("JUMP 2\nHALT\nHALT")
+
+    costs[('JLT', True)] = last_cost(
+        "LOADI 5\nSTORE 50\nLOADI 2\nCMP 50\nJLT 6\nHALT\nHALT")
+    costs[('JLT', False)] = first_cost(
+        "LOADI 5\nSTORE 50\nLOADI 8\nCMP 50\nJLT 6\nHALT\nHALT", 'JLT')
+
+    costs[('JZ', True)] = first_cost("LOADI 0\nJZ 3\nHALT\nHALT", 'JZ')
+    costs[('JZ', False)] = first_cost("LOADI 5\nJZ 3\nHALT\nHALT", 'JZ')
+    costs[('JNZ', True)] = first_cost("LOADI 5\nJNZ 3\nHALT\nHALT", 'JNZ')
+    costs[('JNZ', False)] = first_cost("LOADI 0\nJNZ 99\nHALT", 'JNZ')
+
+    # JOV taken: build 32767 on-CPU (4095*8+7) since LOADI's operand is
+    # only 12 bits, then one more ADD overflows it to -32768.
+    costs[('JOV', True)] = last_cost("""
+LOADI 4095
+STORE 50
+LOAD 50
+ADD 50
+STORE 50
+LOAD 50
+ADD 50
+STORE 50
+LOAD 50
+ADD 50
+STORE 50
+LOADI 7
+STORE 51
+LOAD 50
+ADD 51
+STORE 50
+LOADI 1
+STORE 52
+LOAD 50
+ADD 52
+JOV 22
+HALT
+HALT""")
+    costs[('JOV', False)] = first_cost(
+        "LOADI 5\nSTORE 50\nLOADI 3\nSTORE 51\nLOAD 50\nADD 51\nJOV 99\nHALT", 'JOV')
+
+    return costs
+
+
+def predicted_total(cost_table, log):
+    """Sums cost_table[(mnemonic, taken)] over every row in a real
+    program's trace, inferring taken/not-taken from consecutive PCs:
+    a branch "took" iff the next row's PC isn't this row's PC + 1."""
+    total = 0
+    for i, row in enumerate(log):
+        mnemonic = row['mnemonic']
+        if mnemonic in BRANCH_MNEMONICS and mnemonic != 'JUMP':
+            next_pc = log[i + 1]['pc'] if i + 1 < len(log) else None
+            taken = (next_pc is not None) and (next_pc != row['pc'] + 1)
+            key = (mnemonic, taken)
+        else:
+            key = (mnemonic, None)
+        total += cost_table[key]
+    return total
+
+
+def test_per_instruction_cost_table_matches_real_programs():
+    cost_table = measure_instruction_costs()
+
+    programs = {
+        'sum 1..10': sum_program(10),
+        'sum 1..300': sum_program(300),
+        '20/3': divide_program(20, 3),
+        '5/9': divide_program(5, 9),
+    }
+    for name, program in programs.items():
+        cpu = CPU(program)
+        cpu.run()
+        actual_total = sum(r['gates_used'] for r in cpu.log)
+        predicted = predicted_total(cost_table, cpu.log)
+        check(f"per-instruction cost table reproduces total for {name}",
+              predicted, actual_total)
+
+
 if __name__ == "__main__":
     test_nand()
     test_derived_gates()
@@ -271,4 +393,5 @@ if __name__ == "__main__":
     test_jov_branch()
     test_division_loop()
     test_sum_overflow_flag()
+    test_per_instruction_cost_table_matches_real_programs()
     print("\nAll layers verified: NAND -> gates -> arithmetic all correct.")
